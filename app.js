@@ -1,7 +1,7 @@
 // =============================================
 // CONFIGURACIÓN
 // =============================================
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzgu3J1TnQoZu2dH4f-uAY1VvsHAMcy9_dvrM292ksyvI4isiKOlzm7djODJBaagF6mnA/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxGWExWXXLN0lmWASnP52oQsq2m8ynW9-Ku6To07AQxMWS0S8bC5dfqu3Oj27gYXTKgVA/exec';
 
 // =============================================
 // ESTADO LOCAL
