@@ -38,8 +38,8 @@ let editandoDeudorId    = null;
 let deudorAbonoActual   = null;
 let tipoAbonoActual     = 'deudor';
 let gastoCategoriaSeleccionada = null;
-let productoSeleccionadoDeudor   = null;
-let productoSeleccionadoAnticipo = null;
+let productosDeudor   = [];
+let productosAnticipo = [];
 let editandoAnticipoId  = null;
 let proveedorAbonoActual = null;
 let inventarioMostrar = 10;
@@ -129,7 +129,9 @@ async function sincronizar(ventasDias) {
       items: parsearJSON(f[7]),
       clienteId: String(f[8]||''), clienteNombre: String(f[9]||''),
       clienteCedula: String(f[10]||''), clienteTelefono: String(f[11]||''),
-      clienteDireccion: String(f[12]||'')
+      clienteDireccion: String(f[12]||''),
+      pagadoAhora: (f[13]!==undefined&&f[13]!=='') ? Number(f[13]) : undefined,
+      saldoPendiente: (f[14]!==undefined&&f[14]!=='') ? Number(f[14]) : undefined
     }));
   }
 
@@ -150,10 +152,9 @@ async function sincronizar(ventasDias) {
     DB.deudores = datos.Deudores.slice(1).map(f => ({
       id: String(f[0]), clienteId: String(f[1]||''), nombre: String(f[2]||''),
       cedula: String(f[3]||''), telefono: String(f[4]||''), direccion: String(f[5]||''),
-      productoId: String(f[6]||''), productoNombre: String(f[7]||''),
-      cantidad: Number(f[8])||0, precioUnit: Number(f[9])||0, monto: Number(f[10])||0,
-      nota: String(f[11]||''), fecha: isoAFechaCO(f[12]), hora: String(f[13]||''), fechaLimite: isoAFechaCO(f[14]),
-      abonos: parsearJSON(f[15]), pagada: String(f[16])==='true'
+      productos: parsearJSON(f[6]), monto: Number(f[7])||0,
+      nota: String(f[8]||''), fecha: isoAFechaCO(f[9]), hora: String(f[10]||''), fechaLimite: isoAFechaCO(f[11]),
+      abonos: parsearJSON(f[12]), pagada: String(f[13])==='true'
     }));
   }
 
@@ -161,10 +162,9 @@ async function sincronizar(ventasDias) {
     DB.anticipos = datos.Anticipos.slice(1).map(f => ({
       id: String(f[0]), clienteId: String(f[1]||''), nombre: String(f[2]||''),
       cedula: String(f[3]||''), telefono: String(f[4]||''), direccion: String(f[5]||''),
-      productoId: String(f[6]||''), productoNombre: String(f[7]||''),
-      cantidad: Number(f[8])||0, precioUnit: Number(f[9])||0, monto: Number(f[10])||0,
-      nota: String(f[11]||''), fecha: isoAFechaCO(f[12]), hora: String(f[13]||''), fechaLimite: isoAFechaCO(f[14]),
-      abonos: parsearJSON(f[15]), pagada: String(f[16])==='true', descontado: String(f[17])==='true'
+      productos: parsearJSON(f[6]), monto: Number(f[7])||0,
+      nota: String(f[8]||''), fecha: isoAFechaCO(f[9]), hora: String(f[10]||''), fechaLimite: isoAFechaCO(f[11]),
+      abonos: parsearJSON(f[12]), pagada: String(f[13])==='true', descontado: String(f[14])==='true'
     }));
   }
 
@@ -207,7 +207,7 @@ async function inicializarSheets() {
   if (!datos.Productos || datos.Productos.length === 0)
     await sheetsEscribir('append', 'Productos', ['ID','Ref','Nombre','PCompra','PVenta1','PVenta2','Stock']);
   if (!datos.Ventas || datos.Ventas.length === 0)
-    await sheetsEscribir('append', 'Ventas', ['ID','Fecha','Hora','Total','Ganancia','Nota','MetodoPago','Items','ClienteId','ClienteNombre','ClienteCedula','ClienteTelefono','ClienteDireccion']);
+    await sheetsEscribir('append', 'Ventas', ['ID','Fecha','Hora','Total','Ganancia','Nota','MetodoPago','Items','ClienteId','ClienteNombre','ClienteCedula','ClienteTelefono','ClienteDireccion','PagadoAhora','SaldoPendiente']);
   if (!datos.Usuarios || datos.Usuarios.length === 0) {
     await sheetsEscribir('append', 'Usuarios', ['Usuario','Contraseña','Rol']);
     await sheetsEscribir('append', 'Usuarios', ['admin','Soloagro2812','admin']);
@@ -215,9 +215,9 @@ async function inicializarSheets() {
   if (!datos.Clientes || datos.Clientes.length === 0)
     await sheetsEscribir('append', 'Clientes', ['ID','Nombre','Cedula','Telefono','Direccion','Correo']);
   if (!datos.Deudores || datos.Deudores.length === 0)
-    await sheetsEscribir('append', 'Deudores', ['ID','ClienteId','Nombre','Cedula','Telefono','Direccion','ProductoId','ProductoNombre','Cantidad','PrecioUnit','Monto','Nota','Fecha','Hora','FechaLimite','Abonos','Pagada']);
+    await sheetsEscribir('append', 'Deudores', ['ID','ClienteId','Nombre','Cedula','Telefono','Direccion','Productos','Monto','Nota','Fecha','Hora','FechaLimite','Abonos','Pagada']);
   if (!datos.Anticipos || datos.Anticipos.length === 0)
-    await sheetsEscribir('append', 'Anticipos', ['ID','ClienteId','Nombre','Cedula','Telefono','Direccion','ProductoId','ProductoNombre','Cantidad','PrecioUnit','Monto','Nota','Fecha','Hora','FechaLimite','Abonos','Pagada','Descontado']);
+    await sheetsEscribir('append', 'Anticipos', ['ID','ClienteId','Nombre','Cedula','Telefono','Direccion','Productos','Monto','Nota','Fecha','Hora','FechaLimite','Abonos','Pagada','Descontado']);
   if (!datos.Proveedores || datos.Proveedores.length === 0)
     await sheetsEscribir('append', 'Proveedores', ['ID','Empresa','FechaLlegadaPedido','Monto','NumeroCuotas','FechaLimite','Fecha','Hora','Abonos','Pagada']);
   if (!datos.Gastos || datos.Gastos.length === 0)
@@ -712,7 +712,7 @@ function inicializarBuscadorCliente(key, inputId, resultadosId, onSeleccionar) {
   function renderizar() {
     const estado = buscadoresCliente[key];
     cont.innerHTML = `
-      <div style="background:var(--card);border:0.5px solid var(--borde);border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:0 4px 16px rgba(151,17,17,0.12)">
+      <div style="background:var(--card);border:0.5px solid var(--borde);border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:0 4px 16px rgba(23,74,50,0.12)">
         <div style="padding:8px 12px;background:var(--blush-claro);border-bottom:0.5px solid var(--borde);font-size:11px;color:var(--texto2);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">
           Resultados — ↑↓ para navegar, Enter para elegir
         </div>
@@ -848,44 +848,271 @@ function deudaVencida(d) {
 // Registra un pago (anticipo o abono) contra una deuda/anticipo: queda como abono
 // Y ADEMÁS entra a la caja del día como una venta más (efectivo o transferencia).
 async function registrarPagoDeuda(entidad, tipo, monto, metodoPago) {
+
   const ahora = new Date();
+
+  // =============================================
+  // REGISTRAR EL ABONO EN LA ENTIDAD
+  // =============================================
+
   entidad.abonos = entidad.abonos || [];
-  entidad.abonos.push({ id: uid(), monto, metodoPago, fecha: fechaCO(ahora), hora: horaCO(ahora) });
+
+  entidad.abonos.push({
+    id: uid(),
+    monto: Number(monto) || 0,
+    metodoPago,
+    fecha: fechaCO(ahora),
+    hora: horaCO(ahora)
+  });
+
+
+  // =============================================
+  // CALCULAR COSTO Y GANANCIA
+  // =============================================
+
+  const productos = entidad.productos || [];
 
   let costoTotal = 0;
-  if (entidad.productoId) {
-    const p = DB.productos.find(x => x.id===entidad.productoId);
-    if (p) costoTotal = p.pcompra * (entidad.cantidad||0);
-  }
-  const gananciaTotal = entidad.monto - costoTotal;
-  const gananciaPago = entidad.monto>0 ? monto * (gananciaTotal/entidad.monto) : 0;
-  const etiqueta = tipo==='deudor' ? 'Abono deuda' : 'Anticipo';
-  const descripcion = entidad.nombre;
+
+  productos.forEach(pr => {
+
+    const p = DB.productos.find(
+      x => x.id === pr.productoId
+    );
+
+    if (p) {
+
+      costoTotal +=
+        p.pcompra * (pr.cantidad || 0);
+
+    }
+
+  });
+
+
+  const gananciaTotal =
+    entidad.monto - costoTotal;
+
+
+  const gananciaPago =
+    entidad.monto > 0
+      ? monto * (gananciaTotal / entidad.monto)
+      : 0;
+
+
+  // =============================================
+  // CREAR MOVIMIENTO DE CAJA
+  // =============================================
+
+  const etiqueta =
+    tipo === 'deudor'
+      ? 'Abono deuda'
+      : 'Anticipo';
+
+
+  const nombresProductos =
+    productos
+      .map(p => p.productoNombre)
+      .join(', ');
+
+
+  const itemsBoucher = productos.length
+
+    ? productos.map(pr => ({
+
+        ref: pr.ref || '-',
+
+        nombre: pr.productoNombre,
+
+        cantidad: pr.cantidad,
+
+        precio: pr.precioUnit,
+
+        total:
+          pr.precioUnit * pr.cantidad
+
+      }))
+
+    : [{
+
+        ref: '-',
+
+        nombre: etiqueta,
+
+        cantidad: 1,
+
+        precio: monto,
+
+        total: monto
+
+      }];
+
 
   const venta = {
-    id: uid(), fecha: fechaCO(ahora), hora: horaCO(ahora),
-    total: monto, ganancia: gananciaPago,
-    nota: `${etiqueta}: ${descripcion}${entidad.productoNombre?' — '+entidad.productoNombre:''}`,
+
+    id: uid(),
+
+    fecha: fechaCO(ahora),
+
+    hora: horaCO(ahora),
+
+    total: monto,
+
+    ganancia: gananciaPago,
+
+    nota: nombresProductos
+      ? `${etiqueta} de: ${nombresProductos}`
+      : etiqueta,
+
     metodoPago,
-    items: [{ nombre: `${etiqueta} — ${entidad.productoNombre||descripcion}`, cantidad: 1, precio: monto, total: monto }],
-    clienteId: entidad.clienteId||'', clienteNombre: entidad.nombre||'',
-    clienteCedula: entidad.cedula||'', clienteTelefono: entidad.telefono||'',
-    clienteDireccion: entidad.direccion||''
+
+    items: itemsBoucher,
+
+    clienteId:
+      entidad.clienteId || '',
+
+    clienteNombre:
+      entidad.nombre || '',
+
+    clienteCedula:
+      entidad.cedula || '',
+
+    clienteTelefono:
+      entidad.telefono || '',
+
+    clienteDireccion:
+      entidad.direccion || '',
+
+    pagadoAhora: monto,
+
+    saldoPendiente:
+      calcularSaldo(entidad)
+
   };
+
+
   DB.ventas.push(venta);
-  await sheetsEscribir('append','Ventas',[venta.id,venta.fecha,venta.hora,venta.total,venta.ganancia,venta.nota,venta.metodoPago,JSON.stringify(venta.items),venta.clienteId,venta.clienteNombre,venta.clienteCedula,venta.clienteTelefono,venta.clienteDireccion]);
 
-  entidad.pagada = calcularSaldo(entidad) <= 0;
 
-  if (tipo==='anticipo' && entidad.pagada && entidad.productoId && !entidad.descontado) {
-    const p = DB.productos.find(x => x.id===entidad.productoId);
-    if (p) {
-      p.stock = Math.max(0, p.stock - (entidad.cantidad||0));
-      const idxP = DB.productos.findIndex(x => x.id===p.id);
-      await sheetsEscribir('update','Productos',[p.id,p.ref,p.nombre,p.pcompra,p.pventa1,p.pventa2,p.stock],idxP+2);
-    }
-    entidad.descontado = true;
+  // =============================================
+  // GUARDAR MOVIMIENTO EN VENTAS
+  // =============================================
+
+  await sheetsEscribir(
+    'append',
+    'Ventas',
+    [
+      venta.id,
+      venta.fecha,
+      venta.hora,
+      venta.total,
+      venta.ganancia,
+      venta.nota,
+      venta.metodoPago,
+      JSON.stringify(venta.items),
+      venta.clienteId,
+      venta.clienteNombre,
+      venta.clienteCedula,
+      venta.clienteTelefono,
+      venta.clienteDireccion,
+      venta.pagadoAhora,
+      venta.saldoPendiente
+    ]
+  );
+
+
+  // =============================================
+  // ACTUALIZAR ESTADO DE LA DEUDA / ANTICIPO
+  // =============================================
+
+  entidad.pagada =
+    calcularSaldo(entidad) <= 0;
+
+
+  // =============================================
+  // GUARDAR EL ABONO EN SU HOJA
+  // =============================================
+
+  if (tipo === 'deudor') {
+
+    await guardarDeudorEnSheet(
+      entidad,
+      false
+    );
+
+  } else {
+
+    await guardarAnticipoEnSheet(
+      entidad,
+      false
+    );
+
   }
+
+
+  // =============================================
+  // SI ES ANTICIPO Y YA ESTÁ PAGADO,
+  // DESCONTAR PRODUCTOS DEL INVENTARIO
+  // =============================================
+
+  if (
+    tipo === 'anticipo' &&
+    entidad.pagada &&
+    productos.length &&
+    !entidad.descontado
+  ) {
+
+    for (const pr of productos) {
+
+      const p = DB.productos.find(
+        x => x.id === pr.productoId
+      );
+
+      if (p) {
+
+        p.stock = Math.max(
+          0,
+          p.stock - (pr.cantidad || 0)
+        );
+
+
+        const idxP =
+          DB.productos.findIndex(
+            x => x.id === p.id
+          );
+
+
+        await sheetsEscribir(
+          'update',
+          'Productos',
+          [
+            p.id,
+            p.ref,
+            p.nombre,
+            p.pcompra,
+            p.pventa1,
+            p.pventa2,
+            p.stock
+          ],
+          idxP + 2
+        );
+
+      }
+
+    }
+
+
+    entidad.descontado = true;
+
+
+    // Guardar nuevamente porque cambió descontado
+    await guardarAnticipoEnSheet(
+      entidad,
+      false
+    );
+
+  }
+
 }
 
 function imprimirBoucherDeuda(d, tipo) {
@@ -902,6 +1129,15 @@ function imprimirBoucherDeuda(d, tipo) {
       <td style="text-align:right">${fmt(a.monto)}</td>
     </tr>`).join('');
 
+  const productos = d.productos||[];
+  const filasProductos = productos.map(p => `
+    <tr>
+      <td>${esc(p.ref||'-')}</td>
+      <td>${esc(p.productoNombre)}</td>
+      <td style="text-align:center">${p.cantidad}</td>
+      <td style="text-align:right">${fmt(p.precioUnit)}</td>
+    </tr>`).join('');
+
   document.getElementById('deudor-print-contenido').innerHTML = `
     <div id="tp-header">
       <h1>Multirepuestos SoloAgro</h1>
@@ -915,7 +1151,11 @@ function imprimirBoucherDeuda(d, tipo) {
     <p style="font-size:13px;margin-bottom:4px"><strong>Cédula:</strong> ${esc(d.cedula)}</p>
     ${d.telefono?`<p style="font-size:13px;margin-bottom:4px"><strong>Teléfono:</strong> ${esc(d.telefono)}</p>`:''}
     ${d.direccion?`<p style="font-size:13px;margin-bottom:4px"><strong>Dirección:</strong> ${esc(d.direccion)}</p>`:''}
-    ${d.productoNombre?`<p style="font-size:13px;margin-bottom:4px"><strong>Producto:</strong> ${esc(d.productoNombre)}${d.cantidad?' x'+d.cantidad:''}</p>`:''}
+    ${productos.length?`
+      <table style="margin-top:8px;margin-bottom:8px">
+        <thead><tr><th>Código</th><th>Producto</th><th>Cant.</th><th>Precio</th></tr></thead>
+        <tbody>${filasProductos}</tbody>
+      </table>`:''}
     ${d.nota?`<p style="font-size:13px;margin-bottom:4px"><strong>Comentario:</strong> ${esc(d.nota)}</p>`:''}
     ${d.fechaLimite?`<p style="font-size:13px;margin-bottom:12px"><strong>Fecha límite de pago:</strong> ${d.fechaLimite}</p>`:''}
     <p style="margin-top:8px;font-size:14px"><strong>Monto total: ${fmt(d.monto)}</strong></p>
@@ -973,24 +1213,65 @@ async function guardarAbono() {
 // =============================================
 // DEUDORES (el cliente ya se lleva el producto)
 // =============================================
-function seleccionarProductoDeudor(p) {
-  productoSeleccionadoDeudor = p;
-  document.getElementById('deudor-producto-nombre').textContent = p.nombre;
-  document.getElementById('deudor-producto-detalle').textContent = `Ref: ${p.ref} · Stock: ${p.stock} · Precio: ${fmt(p.pventa1)}`;
-  document.getElementById('deudor-producto-seleccionado').classList.remove('hidden');
-  document.getElementById('deudor-cantidad').classList.remove('hidden');
-  document.getElementById('deudor-cantidad').value = '1';
-  document.getElementById('deudor-monto').value = p.pventa1;
+function agregarProductoDeudor(p) {
+  const existente = productosDeudor.find(x=>x.productoId===p.id);
+  if (existente) {
+    if (existente.cantidad >= p.stock) { alert(`Solo hay ${p.stock} unidades disponibles de ${p.nombre}.`); return; }
+    existente.cantidad += 1;
+  } else {
+    if (p.stock < 1) { alert('Sin stock disponible de este producto.'); return; }
+    productosDeudor.push({ productoId: p.id, ref: p.ref, nombre: p.nombre, cantidad: 1, precioUnit: p.pventa1 });
+  }
+  renderProductosDeudor();
+  recalcularMontoDeudor();
 }
 
-function quitarProductoDeudor() {
-  productoSeleccionadoDeudor = null;
-  document.getElementById('deudor-producto-seleccionado').classList.add('hidden');
-  document.getElementById('deudor-cantidad').classList.add('hidden');
+function recalcularMontoDeudor() {
+  const total = productosDeudor.reduce((a,p)=>a+p.precioUnit*p.cantidad,0);
+  if (total>0) document.getElementById('deudor-monto').value = total;
+}
+
+function renderProductosDeudor() {
+  const cont = document.getElementById('deudor-productos-lista');
+  if (productosDeudor.length === 0) { cont.innerHTML = ''; return; }
+  cont.innerHTML = productosDeudor.map((item,idx) => `
+    <div class="carrito-item">
+      <div class="item-nombre">
+        <strong>${esc(item.nombre)}</strong>
+        <span>Ref: ${esc(item.ref)}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <input type="number" value="${item.cantidad}" min="1" class="input-cantidad-deudor" data-idx="${idx}">
+        <span class="item-total">${fmt(item.precioUnit*item.cantidad)}</span>
+        <button type="button" class="btn-peligro btn-quitar-producto-deudor-item" data-idx="${idx}" style="padding:6px 10px"><i class="ti ti-x"></i></button>
+      </div>
+    </div>`).join('');
+
+  cont.querySelectorAll('.input-cantidad-deudor').forEach(input => {
+    input.addEventListener('change', () => {
+      const idx = parseInt(input.dataset.idx);
+      const item = productosDeudor[idx];
+      const p = DB.productos.find(x=>x.id===item.productoId);
+      let nuevaCant = Math.max(1, parseInt(input.value)||1);
+      if (p && nuevaCant > p.stock) {
+        alert(`Solo hay ${p.stock} unidades disponibles de ${item.nombre}.`);
+        nuevaCant = p.stock > 0 ? p.stock : 1;
+      }
+      item.cantidad = nuevaCant;
+      renderProductosDeudor();
+      recalcularMontoDeudor();
+    });
+  });
+  cont.querySelectorAll('.btn-quitar-producto-deudor-item').forEach(b =>
+    b.addEventListener('click', () => {
+      productosDeudor.splice(parseInt(b.dataset.idx),1);
+      renderProductosDeudor();
+      recalcularMontoDeudor();
+    }));
 }
 
 async function guardarDeudorEnSheet(d, esNuevo) {
-  const fila = [d.id,d.clienteId,d.nombre,d.cedula,d.telefono,d.direccion,d.productoId,d.productoNombre,d.cantidad,d.precioUnit,d.monto,d.nota,d.fecha,d.hora,d.fechaLimite,JSON.stringify(d.abonos),d.pagada];
+  const fila = [d.id,d.clienteId,d.nombre,d.cedula,d.telefono,d.direccion,JSON.stringify(d.productos||[]),d.monto,d.nota,d.fecha,d.hora,d.fechaLimite,JSON.stringify(d.abonos),d.pagada];
   if (esNuevo) { await sheetsEscribir('append','Deudores',fila); }
   else {
     const idx = DB.deudores.findIndex(x=>x.id===d.id);
@@ -1000,9 +1281,7 @@ async function guardarDeudorEnSheet(d, esNuevo) {
 
 function abrirModalDeudor(id) {
   editandoDeudorId = id || null;
-  productoSeleccionadoDeudor = null;
-  document.getElementById('deudor-producto-seleccionado').classList.add('hidden');
-  document.getElementById('deudor-cantidad').classList.add('hidden');
+  productosDeudor = [];
   document.getElementById('deudor-producto-buscar').value = '';
   document.getElementById('deudor-producto-resultados').innerHTML = '';
   document.getElementById('deudor-anticipo').value = '';
@@ -1015,45 +1294,38 @@ function abrirModalDeudor(id) {
     const d = DB.deudores.find(x => x.id === id);
     if (!d) return;
     seleccionarClienteDeudor({ id: d.clienteId, nombre: d.nombre, cedula: d.cedula, telefono: d.telefono });
+    productosDeudor = (d.productos||[]).map(p=>({productoId:p.productoId, ref:p.ref||'', nombre:p.productoNombre, cantidad:p.cantidad, precioUnit:p.precioUnit}));
     document.getElementById('deudor-monto').value = d.monto;
     document.getElementById('deudor-nota').value = d.nota||'';
     document.getElementById('deudor-fecha-limite').value = coAIso(d.fechaLimite);
-    if (d.productoNombre) {
-      document.getElementById('deudor-producto-nombre').textContent = d.productoNombre;
-      document.getElementById('deudor-producto-detalle').textContent = `Cantidad: ${d.cantidad}`;
-      document.getElementById('deudor-producto-seleccionado').classList.remove('hidden');
-    }
   } else {
     ['deudor-monto','deudor-nota','deudor-fecha-limite'].forEach(x => document.getElementById(x).value='');
   }
+  renderProductosDeudor();
   abrirModal('modal-deudor');
 }
 
 async function guardarDeudor() {
-  const cantidad = productoSeleccionadoDeudor ? (parseInt(document.getElementById('deudor-cantidad').value)||1) : 0;
   const monto = parseFloat(document.getElementById('deudor-monto').value)||0;
   const nota = document.getElementById('deudor-nota').value.trim();
   const fechaLimiteISO = document.getElementById('deudor-fecha-limite').value;
   if (!clienteDeudor||!monto) { alert('Selecciona un cliente e ingresa el monto de la deuda'); return; }
-  if (productoSeleccionadoDeudor && cantidad > productoSeleccionadoDeudor.stock) {
-    alert(`Solo hay ${productoSeleccionadoDeudor.stock} unidades disponibles de este producto.`); return;
+  for (const item of productosDeudor) {
+    const p = DB.productos.find(x => x.id===item.productoId);
+    if (p && item.cantidad > p.stock) { alert(`Solo hay ${p.stock} unidades disponibles de ${item.nombre}.`); return; }
   }
 
   const fechaLimite = fechaLimiteISO ? isoAFechaCO(fechaLimiteISO) : '';
   const btn = document.getElementById('btn-guardar-deudor');
   btn.textContent='Guardando...'; btn.disabled=true;
+  const productos = productosDeudor.map(p=>({productoId:p.productoId, ref:p.ref, productoNombre:p.nombre, cantidad:p.cantidad, precioUnit:p.precioUnit}));
 
   if (editandoDeudorId) {
     const d = DB.deudores.find(x => x.id===editandoDeudorId);
     if (d) {
       Object.assign(d, {
         clienteId: clienteDeudor.id, nombre: clienteDeudor.nombre, cedula: clienteDeudor.cedula,
-        telefono: clienteDeudor.telefono||'', nota,
-        productoId: productoSeleccionadoDeudor?productoSeleccionadoDeudor.id:d.productoId,
-        productoNombre: productoSeleccionadoDeudor?productoSeleccionadoDeudor.nombre:d.productoNombre,
-        cantidad: productoSeleccionadoDeudor?cantidad:d.cantidad,
-        precioUnit: productoSeleccionadoDeudor?productoSeleccionadoDeudor.pventa1:d.precioUnit,
-        monto, fechaLimite
+        telefono: clienteDeudor.telefono||'', nota, productos, monto, fechaLimite
       });
       await guardarDeudorEnSheet(d, false);
     }
@@ -1067,11 +1339,11 @@ async function guardarDeudor() {
   const metodoPago = document.querySelector('input[name="deudor-metodo"]:checked').value;
   if (anticipo > monto) { alert('El pago inicial no puede ser mayor al monto total de la deuda'); return; }
 
-  // El cliente se lleva el producto de una vez: se descuenta el inventario ya
-  if (productoSeleccionadoDeudor) {
-    const p = DB.productos.find(x => x.id===productoSeleccionadoDeudor.id);
+  // El cliente se lleva los productos de una vez: se descuenta el inventario ya
+  for (const item of productosDeudor) {
+    const p = DB.productos.find(x => x.id===item.productoId);
     if (p) {
-      p.stock = Math.max(0, p.stock - cantidad);
+      p.stock = Math.max(0, p.stock - item.cantidad);
       const idxP = DB.productos.findIndex(x => x.id===p.id);
       await sheetsEscribir('update','Productos',[p.id,p.ref,p.nombre,p.pcompra,p.pventa1,p.pventa2,p.stock],idxP+2);
     }
@@ -1081,9 +1353,7 @@ async function guardarDeudor() {
   const nuevo = {
     id: uid(), clienteId: clienteDeudor.id, nombre: clienteDeudor.nombre, cedula: clienteDeudor.cedula,
     telefono: clienteDeudor.telefono||'', direccion: clienteDeudor.direccion||'',
-    productoId: productoSeleccionadoDeudor?productoSeleccionadoDeudor.id:'',
-    productoNombre: productoSeleccionadoDeudor?productoSeleccionadoDeudor.nombre:'',
-    cantidad, precioUnit: productoSeleccionadoDeudor?productoSeleccionadoDeudor.pventa1:0,
+    productos,
     monto, nota, fecha: fechaCO(ahora), hora: horaCO(ahora), fechaLimite,
     abonos: [], pagada: false
   };
@@ -1123,7 +1393,7 @@ function renderDeudores() {
       : '<span class="badge alerta">Pendiente</span>';
     return `<tr>
       <td>${esc(d.nombre)}<div style="font-size:11px;color:var(--texto2)">CC ${esc(d.cedula)}</div></td>
-      <td style="font-size:13px">${d.productoNombre?esc(d.productoNombre)+(d.cantidad?' x'+d.cantidad:''):'-'}</td>
+      <td style="font-size:13px">${d.productos&&d.productos.length?d.productos.map(p=>esc(p.productoNombre)+' x'+p.cantidad).join(', '):'-'}</td>
       <td>${fmt(d.monto)}</td>
       <td>${fmt(abonado)}</td>
       <td style="font-weight:500">${fmt(saldo)}</td>
@@ -1153,24 +1423,65 @@ function renderDeudores() {
 // =============================================
 // ANTICIPOS (el producto se queda en el inventario hasta pagar todo)
 // =============================================
-function seleccionarProductoAnticipo(p) {
-  productoSeleccionadoAnticipo = p;
-  document.getElementById('anticipo-producto-nombre').textContent = p.nombre;
-  document.getElementById('anticipo-producto-detalle').textContent = `Ref: ${p.ref} · Stock: ${p.stock} · Precio: ${fmt(p.pventa1)}`;
-  document.getElementById('anticipo-producto-seleccionado').classList.remove('hidden');
-  document.getElementById('anticipo-cantidad').classList.remove('hidden');
-  document.getElementById('anticipo-cantidad').value = '1';
-  document.getElementById('anticipo-monto').value = p.pventa1;
+function agregarProductoAnticipo(p) {
+  const existente = productosAnticipo.find(x=>x.productoId===p.id);
+  if (existente) {
+    if (existente.cantidad >= p.stock) { alert(`Solo hay ${p.stock} unidades disponibles de ${p.nombre}.`); return; }
+    existente.cantidad += 1;
+  } else {
+    if (p.stock < 1) { alert('Sin stock disponible de este producto.'); return; }
+    productosAnticipo.push({ productoId: p.id, ref: p.ref, nombre: p.nombre, cantidad: 1, precioUnit: p.pventa1 });
+  }
+  renderProductosAnticipo();
+  recalcularMontoAnticipo();
 }
 
-function quitarProductoAnticipo() {
-  productoSeleccionadoAnticipo = null;
-  document.getElementById('anticipo-producto-seleccionado').classList.add('hidden');
-  document.getElementById('anticipo-cantidad').classList.add('hidden');
+function recalcularMontoAnticipo() {
+  const total = productosAnticipo.reduce((a,p)=>a+p.precioUnit*p.cantidad,0);
+  if (total>0) document.getElementById('anticipo-monto').value = total;
+}
+
+function renderProductosAnticipo() {
+  const cont = document.getElementById('anticipo-productos-lista');
+  if (productosAnticipo.length === 0) { cont.innerHTML = ''; return; }
+  cont.innerHTML = productosAnticipo.map((item,idx) => `
+    <div class="carrito-item">
+      <div class="item-nombre">
+        <strong>${esc(item.nombre)}</strong>
+        <span>Ref: ${esc(item.ref)}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <input type="number" value="${item.cantidad}" min="1" class="input-cantidad-anticipo" data-idx="${idx}">
+        <span class="item-total">${fmt(item.precioUnit*item.cantidad)}</span>
+        <button type="button" class="btn-peligro btn-quitar-producto-anticipo-item" data-idx="${idx}" style="padding:6px 10px"><i class="ti ti-x"></i></button>
+      </div>
+    </div>`).join('');
+
+  cont.querySelectorAll('.input-cantidad-anticipo').forEach(input => {
+    input.addEventListener('change', () => {
+      const idx = parseInt(input.dataset.idx);
+      const item = productosAnticipo[idx];
+      const p = DB.productos.find(x=>x.id===item.productoId);
+      let nuevaCant = Math.max(1, parseInt(input.value)||1);
+      if (p && nuevaCant > p.stock) {
+        alert(`Solo hay ${p.stock} unidades disponibles de ${item.nombre}.`);
+        nuevaCant = p.stock > 0 ? p.stock : 1;
+      }
+      item.cantidad = nuevaCant;
+      renderProductosAnticipo();
+      recalcularMontoAnticipo();
+    });
+  });
+  cont.querySelectorAll('.btn-quitar-producto-anticipo-item').forEach(b =>
+    b.addEventListener('click', () => {
+      productosAnticipo.splice(parseInt(b.dataset.idx),1);
+      renderProductosAnticipo();
+      recalcularMontoAnticipo();
+    }));
 }
 
 async function guardarAnticipoEnSheet(a, esNuevo) {
-  const fila = [a.id,a.clienteId,a.nombre,a.cedula,a.telefono,a.direccion,a.productoId,a.productoNombre,a.cantidad,a.precioUnit,a.monto,a.nota,a.fecha,a.hora,a.fechaLimite,JSON.stringify(a.abonos),a.pagada,a.descontado];
+  const fila = [a.id,a.clienteId,a.nombre,a.cedula,a.telefono,a.direccion,JSON.stringify(a.productos||[]),a.monto,a.nota,a.fecha,a.hora,a.fechaLimite,JSON.stringify(a.abonos),a.pagada,a.descontado];
   if (esNuevo) { await sheetsEscribir('append','Anticipos',fila); }
   else {
     const idx = DB.anticipos.findIndex(x=>x.id===a.id);
@@ -1180,9 +1491,7 @@ async function guardarAnticipoEnSheet(a, esNuevo) {
 
 function abrirModalAnticipo(id) {
   editandoAnticipoId = id || null;
-  productoSeleccionadoAnticipo = null;
-  document.getElementById('anticipo-producto-seleccionado').classList.add('hidden');
-  document.getElementById('anticipo-cantidad').classList.add('hidden');
+  productosAnticipo = [];
   document.getElementById('anticipo-producto-buscar').value = '';
   document.getElementById('anticipo-producto-resultados').innerHTML = '';
   document.getElementById('anticipo-inicial').value = '';
@@ -1195,42 +1504,38 @@ function abrirModalAnticipo(id) {
     const a = DB.anticipos.find(x => x.id === id);
     if (!a) return;
     seleccionarClienteAnticipo({ id: a.clienteId, nombre: a.nombre, cedula: a.cedula, telefono: a.telefono });
+    productosAnticipo = (a.productos||[]).map(p=>({productoId:p.productoId, ref:p.ref||'', nombre:p.productoNombre, cantidad:p.cantidad, precioUnit:p.precioUnit}));
     document.getElementById('anticipo-monto').value = a.monto;
     document.getElementById('anticipo-nota').value = a.nota||'';
     document.getElementById('anticipo-fecha-limite').value = coAIso(a.fechaLimite);
-    if (a.productoNombre) {
-      document.getElementById('anticipo-producto-nombre').textContent = a.productoNombre;
-      document.getElementById('anticipo-producto-detalle').textContent = `Cantidad: ${a.cantidad}`;
-      document.getElementById('anticipo-producto-seleccionado').classList.remove('hidden');
-    }
   } else {
     ['anticipo-monto','anticipo-nota','anticipo-fecha-limite'].forEach(x => document.getElementById(x).value='');
   }
+  renderProductosAnticipo();
   abrirModal('modal-anticipo');
 }
 
 async function guardarAnticipo() {
-  const cantidad = productoSeleccionadoAnticipo ? (parseInt(document.getElementById('anticipo-cantidad').value)||1) : 0;
   const monto = parseFloat(document.getElementById('anticipo-monto').value)||0;
   const nota = document.getElementById('anticipo-nota').value.trim();
   const fechaLimiteISO = document.getElementById('anticipo-fecha-limite').value;
   if (!clienteAnticipo||!monto) { alert('Selecciona un cliente e ingresa el monto total'); return; }
+  for (const item of productosAnticipo) {
+    const p = DB.productos.find(x => x.id===item.productoId);
+    if (p && item.cantidad > p.stock) { alert(`Solo hay ${p.stock} unidades disponibles de ${item.nombre}.`); return; }
+  }
 
   const fechaLimite = fechaLimiteISO ? isoAFechaCO(fechaLimiteISO) : '';
   const btn = document.getElementById('btn-guardar-anticipo');
   btn.textContent='Guardando...'; btn.disabled=true;
+  const productos = productosAnticipo.map(p=>({productoId:p.productoId, ref:p.ref, productoNombre:p.nombre, cantidad:p.cantidad, precioUnit:p.precioUnit}));
 
   if (editandoAnticipoId) {
     const a = DB.anticipos.find(x => x.id===editandoAnticipoId);
     if (a) {
       Object.assign(a, {
         clienteId: clienteAnticipo.id, nombre: clienteAnticipo.nombre, cedula: clienteAnticipo.cedula,
-        telefono: clienteAnticipo.telefono||'', nota,
-        productoId: productoSeleccionadoAnticipo?productoSeleccionadoAnticipo.id:a.productoId,
-        productoNombre: productoSeleccionadoAnticipo?productoSeleccionadoAnticipo.nombre:a.productoNombre,
-        cantidad: productoSeleccionadoAnticipo?cantidad:a.cantidad,
-        precioUnit: productoSeleccionadoAnticipo?productoSeleccionadoAnticipo.pventa1:a.precioUnit,
-        monto, fechaLimite
+        telefono: clienteAnticipo.telefono||'', nota, productos, monto, fechaLimite
       });
       await guardarAnticipoEnSheet(a, false);
     }
@@ -1248,9 +1553,7 @@ async function guardarAnticipo() {
   const nuevo = {
     id: uid(), clienteId: clienteAnticipo.id, nombre: clienteAnticipo.nombre, cedula: clienteAnticipo.cedula,
     telefono: clienteAnticipo.telefono||'', direccion: clienteAnticipo.direccion||'',
-    productoId: productoSeleccionadoAnticipo?productoSeleccionadoAnticipo.id:'',
-    productoNombre: productoSeleccionadoAnticipo?productoSeleccionadoAnticipo.nombre:'',
-    cantidad, precioUnit: productoSeleccionadoAnticipo?productoSeleccionadoAnticipo.pventa1:0,
+    productos,
     monto, nota, fecha: fechaCO(ahora), hora: horaCO(ahora), fechaLimite,
     abonos: [], pagada: false, descontado: false
   };
@@ -1290,7 +1593,7 @@ function renderAnticipos() {
       : '<span class="badge alerta">Pendiente</span>';
     return `<tr>
       <td>${esc(a.nombre)}<div style="font-size:11px;color:var(--texto2)">CC ${esc(a.cedula)}</div></td>
-      <td style="font-size:13px">${a.productoNombre?esc(a.productoNombre)+(a.cantidad?' x'+a.cantidad:''):'-'}</td>
+      <td style="font-size:13px">${a.productos&&a.productos.length?a.productos.map(p=>esc(p.productoNombre)+' x'+p.cantidad).join(', '):'-'}</td>
       <td>${fmt(a.monto)}</td>
       <td>${fmt(abonado)}</td>
       <td style="font-weight:500">${fmt(saldo)}</td>
@@ -1679,8 +1982,12 @@ function abrirFactura(venta) {
     </table></div>
     <div style="margin-top:1rem;padding-top:1rem;border-top:0.5px solid var(--borde)">
       <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:600;color:var(--rosa-oscuro);font-family:var(--fuente-titulo)">
-        <span>Total</span><span>${fmt(venta.total)}</span>
+        <span>${venta.saldoPendiente!==undefined?'Pagado ahora':'Total'}</span><span>${fmt(venta.total)}</span>
       </div>
+      ${venta.saldoPendiente!==undefined?`
+      <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:600;color:#A32D2D;margin-top:6px">
+        <span>Falta por cancelar</span><span>${fmt(venta.saldoPendiente)}</span>
+      </div>`:''}
     </div>
     <div style="text-align:center;margin-top:1.5rem;padding-top:1rem;border-top:0.5px solid var(--borde);font-size:12px;color:var(--texto3)">¡Gracias por tu compra! 🌸</div>
   `;
@@ -1719,7 +2026,8 @@ function imprimirBoucher(venta) {
       <thead><tr><th>Código</th><th>Producto</th><th>Cant.</th><th>Precio</th></tr></thead>
       <tbody>${filas}</tbody>
     </table>
-    <p style="margin-top:12px;font-size:14px;text-align:right"><strong>Total: ${fmt(venta.total)}</strong></p>
+    <p style="margin-top:12px;font-size:14px;text-align:right"><strong>${venta.saldoPendiente!==undefined?'Pagado ahora':'Total'}: ${fmt(venta.total)}</strong></p>
+    ${venta.saldoPendiente!==undefined?`<p style="margin-top:4px;font-size:14px;text-align:right;color:#A32D2D"><strong>Falta por cancelar: ${fmt(venta.saldoPendiente)}</strong></p>`:''}
     <p style="margin-top:4px;font-size:12px;text-align:right">Método de pago: ${metodoTexto}</p>
     <p style="text-align:center;margin-top:20px;font-size:12px">¡Gracias por tu compra!</p>
   `;
@@ -2074,7 +2382,7 @@ async function confirmarVenta() {
     clienteDireccion: clienteVenta?clienteVenta.direccion:''
   };
   DB.ventas.push(venta);
-  await sheetsEscribir('append','Ventas',[venta.id,venta.fecha,venta.hora,venta.total,venta.ganancia,venta.nota,venta.metodoPago,JSON.stringify(venta.items),venta.clienteId,venta.clienteNombre,venta.clienteCedula,venta.clienteTelefono,venta.clienteDireccion]);
+  await sheetsEscribir('append','Ventas',[venta.id,venta.fecha,venta.hora,venta.total,venta.ganancia,venta.nota,venta.metodoPago,JSON.stringify(venta.items),venta.clienteId,venta.clienteNombre,venta.clienteCedula,venta.clienteTelefono,venta.clienteDireccion,'','']);
 
   guardarLocal();
   mostrarToast(`Venta registrada · ${metodoPago==='transferencia'?'🏦':'💵'} ${fmt(total)}. Tócala en "Ventas de hoy" para imprimir el boucher.`);
@@ -2109,13 +2417,11 @@ function renderHistorial() {
   }
 
   const totalDia=ventas.reduce((a,v)=>a+v.total,0);
-  const ganDia=ventas.reduce((a,v)=>a+v.ganancia,0);
   const efectivo=ventas.filter(v=>v.metodoPago!=='transferencia').reduce((a,v)=>a+v.total,0);
   const transferencia=ventas.filter(v=>v.metodoPago==='transferencia').reduce((a,v)=>a+v.total,0);
 
   summary.innerHTML=`<div id="dash-metrics" style="margin-bottom:1rem">
     <div class="metric rosa" style="display:inline-block;margin-right:12px;margin-bottom:8px;min-width:160px"><div class="mlabel">Total vendido</div><div class="mvalue">${fmt(totalDia)}</div></div>
-    <div class="metric dorado" style="display:inline-block;margin-right:12px;margin-bottom:8px;min-width:160px"><div class="mlabel">Ganancia total</div><div class="mvalue">${fmt(ganDia)}</div></div>
     <div class="metric" style="display:inline-block;margin-right:12px;margin-bottom:8px;min-width:140px"><div class="mlabel">💵 Efectivo</div><div class="mvalue">${fmt(efectivo)}</div></div>
     <div class="metric" style="display:inline-block;margin-bottom:8px;min-width:160px"><div class="mlabel">🏦 Transferencia</div><div class="mvalue">${fmt(transferencia)}</div></div>
   </div>`;
@@ -2149,9 +2455,9 @@ async function eliminarVenta(id) {
   DB.ventas=DB.ventas.filter(v=>v.id!==id);
   guardarLocal();
   await sheetsEscribir('clear','Ventas',null,null);
-  await sheetsEscribir('append','Ventas',['ID','Fecha','Hora','Total','Ganancia','Nota','MetodoPago','Items','ClienteId','ClienteNombre','ClienteCedula','ClienteTelefono','ClienteDireccion']);
+  await sheetsEscribir('append','Ventas',['ID','Fecha','Hora','Total','Ganancia','Nota','MetodoPago','Items','ClienteId','ClienteNombre','ClienteCedula','ClienteTelefono','ClienteDireccion','PagadoAhora','SaldoPendiente']);
   for (const v of DB.ventas)
-    await sheetsEscribir('append','Ventas',[v.id,v.fecha,v.hora,v.total,v.ganancia,v.nota,v.metodoPago,JSON.stringify(v.items),v.clienteId||'',v.clienteNombre||'',v.clienteCedula||'',v.clienteTelefono||'',v.clienteDireccion||'']);
+    await sheetsEscribir('append','Ventas',[v.id,v.fecha,v.hora,v.total,v.ganancia,v.nota,v.metodoPago,JSON.stringify(v.items),v.clienteId||'',v.clienteNombre||'',v.clienteCedula||'',v.clienteTelefono||'',v.clienteDireccion||'',v.pagadoAhora!==undefined?v.pagadoAhora:'',v.saldoPendiente!==undefined?v.saldoPendiente:'']);
   renderHistorial(); renderDashboard(); mostrarToast('Venta eliminada');
 }
 
@@ -2514,14 +2820,7 @@ document.addEventListener('DOMContentLoaded', () => {
   inicializarBuscadorCliente('deudor', 'deudor-cliente-buscar', 'deudor-cliente-resultados', seleccionarClienteDeudor);
   document.getElementById('btn-nuevo-cliente-deudor').addEventListener('click', () => abrirModalNuevoCliente('deudor'));
   document.getElementById('btn-quitar-cliente-deudor').addEventListener('click', quitarClienteDeudor);
-  inicializarBuscadorProducto('deudor', 'deudor-producto-buscar', 'deudor-producto-resultados', seleccionarProductoDeudor);
-  document.getElementById('btn-quitar-producto-deudor').addEventListener('click', quitarProductoDeudor);
-  document.getElementById('deudor-cantidad').addEventListener('input', () => {
-    if (productoSeleccionadoDeudor) {
-      const cant = parseInt(document.getElementById('deudor-cantidad').value)||1;
-      document.getElementById('deudor-monto').value = productoSeleccionadoDeudor.pventa1 * cant;
-    }
-  });
+  inicializarBuscadorProducto('deudor', 'deudor-producto-buscar', 'deudor-producto-resultados', agregarProductoDeudor);
   document.getElementById('btn-abrir-modal-deudor').addEventListener('click', () => abrirModalDeudor(null));
   document.getElementById('btn-guardar-deudor').addEventListener('click', guardarDeudor);
   document.getElementById('btn-guardar-abono').addEventListener('click', guardarAbono);
@@ -2531,14 +2830,7 @@ document.addEventListener('DOMContentLoaded', () => {
   inicializarBuscadorCliente('anticipo', 'anticipo-cliente-buscar', 'anticipo-cliente-resultados', seleccionarClienteAnticipo);
   document.getElementById('btn-nuevo-cliente-anticipo').addEventListener('click', () => abrirModalNuevoCliente('anticipo'));
   document.getElementById('btn-quitar-cliente-anticipo').addEventListener('click', quitarClienteAnticipo);
-  inicializarBuscadorProducto('anticipo', 'anticipo-producto-buscar', 'anticipo-producto-resultados', seleccionarProductoAnticipo);
-  document.getElementById('btn-quitar-producto-anticipo').addEventListener('click', quitarProductoAnticipo);
-  document.getElementById('anticipo-cantidad').addEventListener('input', () => {
-    if (productoSeleccionadoAnticipo) {
-      const cant = parseInt(document.getElementById('anticipo-cantidad').value)||1;
-      document.getElementById('anticipo-monto').value = productoSeleccionadoAnticipo.pventa1 * cant;
-    }
-  });
+  inicializarBuscadorProducto('anticipo', 'anticipo-producto-buscar', 'anticipo-producto-resultados', agregarProductoAnticipo);
   document.getElementById('btn-abrir-modal-anticipo').addEventListener('click', () => abrirModalAnticipo(null));
   document.getElementById('btn-guardar-anticipo').addEventListener('click', guardarAnticipo);
 

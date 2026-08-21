@@ -1,22 +1,22 @@
 :root {
-  --rosa:        #E11D1D;
-  --rosa-oscuro: #971111;
-  --rosa-medio:  #C62828;
-  --rosa-claro:  #FBDCDC;
-  --blush:       #F3C6C4;
-  --blush-claro: #FBF1EF;
+  --rosa:        #174A32;
+  --rosa-oscuro: #0F3322;
+  --rosa-medio:  #2E7D52;
+  --rosa-claro:  #E3EEE7;
+  --blush:       #E8DFC4;
+  --blush-claro: #F4F0E6;
   --malva:       #1E8A8A;
   --malva-claro: #E0F5F5;
-  --dorado:      #D97706;
-  --dorado-oscuro:#A85D04;
-  --dorado-claro:#FDF3E3;
-  --texto:       #211917;
-  --texto2:      #6B5852;
-  --texto3:      #C7B9B4;
-  --fondo:       #F1EFEC;
+  --dorado:      #C49A45;
+  --dorado-oscuro:#9C7833;
+  --dorado-claro:#F5EDDC;
+  --texto:       #1E2B23;
+  --texto2:      #5C6B60;
+  --texto3:      #AAB8AE;
+  --fondo:       #F4F0E6;
   --card:        #FFFFFF;
-  --borde:       #E5DAD6;
-  --sombra:      0 2px 12px rgba(151,17,17,0.10);
+  --borde:       #E3DCC8;
+  --sombra:      0 2px 12px rgba(23,74,50,0.10);
   --radio:       12px;
   --fuente-titulo: 'Playfair Display', serif;
   --fuente-cuerpo: 'Inter', sans-serif;
@@ -108,8 +108,8 @@ body {
 #sidebar {
   width: 230px;
   flex-shrink: 0;
-  background: var(--card);
-  border-right: 0.5px solid var(--borde);
+  background: var(--rosa);
+  border-right: none;
   display: flex;
   flex-direction: column;
 }
@@ -119,9 +119,9 @@ body {
   align-items: center;
   gap: 10px;
   padding: 1.5rem 1.25rem;
-  color: var(--rosa);
+  color: #fff;
   font-size: 20px;
-  border-bottom: 0.5px solid var(--borde);
+  border-bottom: 0.5px solid rgba(255,255,255,0.15);
 }
 
 #app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -155,8 +155,8 @@ body {
   margin-right: auto;
 }
 
-#topbar-titulo { display: block; font-family: var(--fuente-titulo); font-size: 18px; color: var(--rosa-oscuro); font-weight: 600; line-height: 1.2; }
-#topbar-sub { display: block; font-size: 10px; color: var(--texto2); text-transform: uppercase; letter-spacing: 1px; font-weight: 300; }
+#topbar-titulo { display: block; font-family: var(--fuente-titulo); font-size: 18px; color: #fff; font-weight: 600; line-height: 1.2; }
+#topbar-sub { display: block; font-size: 10px; color: rgba(255,255,255,0.65); text-transform: uppercase; letter-spacing: 1px; font-weight: 300; }
 #topbar-right { display: flex; align-items: center; gap: 10px; }
 #topbar-user { font-size: 12px; color: var(--texto2); }
 
@@ -193,7 +193,7 @@ body {
   padding: 12px 14px;
   font-size: 14.5px;
   font-weight: 500;
-  color: var(--texto2);
+  color: rgba(255,255,255,0.75);
   cursor: pointer;
   border: none;
   border-left: 3px solid transparent;
@@ -209,8 +209,8 @@ body {
 }
 
 .nav-tab i { font-size: 18px; width: 20px; text-align: center; flex-shrink: 0; }
-.nav-tab:hover { color: var(--rosa); background: var(--blush-claro); }
-.nav-tab.active { color: var(--rosa-oscuro); background: var(--rosa-claro); border-left-color: var(--rosa); font-weight: 600; }
+.nav-tab:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.nav-tab.active { color: #fff; background: var(--rosa-medio); border-left-color: var(--dorado); font-weight: 600; }
 
 /* CONTENIDO */
 /* width:100% es necesario: dentro de un flex-container en columna, un margin:auto
@@ -466,6 +466,9 @@ input:focus, select:focus { border-color: var(--rosa-medio); background: var(--c
   align-items: center;
   justify-content: center;
 }
+
+/* Modal que se abre encima de otro modal (ej: "Nuevo cliente" desde Deudor/Anticipo) */
+#modal-cliente.modal-bg { z-index: 260; }
 
 .modal {
   background: var(--card);

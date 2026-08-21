@@ -52,7 +52,7 @@
         <div id="topbar">
           <button id="btn-menu-toggle" aria-label="Abrir menú"><i class="ti ti-menu-2"></i></button>
           <div id="topbar-right">
-            <span id="sync-status">Conectando...</span>
+            <span id="sync-status" class="conectado">Conectado</span>
             <span id="topbar-user">KEVIN · admin</span>
             <button id="btn-logout">Salir</button>
           </div>
@@ -62,14 +62,80 @@
 
       <!-- DASHBOARD -->
       <section id="panel-dashboard" class="panel active">
-        <p id="dash-fecha"></p>
-        <div id="dash-metrics"></div>
+        <p id="dash-fecha">Hoy · jueves, 20 de agosto de 2026</p>
+        <div id="dash-metrics">
+    <div class="metric rosa"><div class="mlabel">Total vendido hoy</div><div class="mvalue">$420.000</div></div>
+    <div class="metric"><div class="mlabel">Transacciones</div><div class="mvalue">6</div></div>
+    <div class="metric"><div class="mlabel">Productos</div><div class="mvalue">4</div></div>
+    <div class="metric alerta"><div class="mlabel">Stock bajo</div><div class="mvalue">2</div></div>
+    
+    <div class="metric danger"><div class="mlabel">Deudas vencidas</div><div class="mvalue">1</div></div>
+    <div class="metric danger"><div class="mlabel">Anticipos vencidos</div><div class="mvalue">1</div></div>
+    
+    
+  </div>
         <div class="card">
           <div class="section-header">
             <h2>Ventas de hoy</h2>
             <button class="btn-primary" data-goto="ventas">+ Nueva venta</button>
           </div>
-          <div id="dash-ventas-hoy"></div>
+          <div id="dash-ventas-hoy"><div class="tabla-wrap"><table>
+    <thead><tr><th>Hora</th><th>Productos</th><th>Nota</th><th>Pago</th><th>Total</th><th>Ganancia</th><th></th></tr></thead>
+    <tbody>
+    <tr class="fila-venta-clickeable" data-id="7918xagoucjmt1wdw12">
+      <td>02:12 p. m.</td>
+      <td style="font-size:13px">Abono deuda — CARBURADOR SHINDAIWA B-45 x1</td>
+      <td style="font-size:13px;color:var(--texto2)">Abono deuda: KEVIN FABIAN GUERRERO TORRES — CARBURADOR SHINDAIWA B-45</td>
+      <td><span class="badge verde">💵 Efectivo</span></td>
+      <td style="font-weight:500">$60.000</td>
+      <td style="color:var(--rosa-oscuro);font-weight:500">$21.600</td>
+      <td><i class="ti ti-receipt" style="color:var(--rosa-medio);font-size:16px"></i></td>
+    </tr>
+    <tr class="fila-venta-clickeable" data-id="mqk7jniieamt1w7exf">
+      <td>02:07 p. m.</td>
+      <td style="font-size:13px">Abono deuda — CARBURADOR SHINDAIWA B-45 x1</td>
+      <td style="font-size:13px;color:var(--texto2)">Abono deuda: KEVIN FABIAN GUERRERO TORRES — CARBURADOR SHINDAIWA B-45</td>
+      <td><span class="badge verde">💵 Efectivo</span></td>
+      <td style="font-weight:500">$65.000</td>
+      <td style="color:var(--rosa-oscuro);font-weight:500">$23.400</td>
+      <td><i class="ti ti-receipt" style="color:var(--rosa-medio);font-size:16px"></i></td>
+    </tr>
+    <tr class="fila-venta-clickeable" data-id="z26bfojsm7mt1w6osi">
+      <td>02:07 p. m.</td>
+      <td style="font-size:13px">Anticipo — CARBURADOR SHINDAIWA B-45 x1</td>
+      <td style="font-size:13px;color:var(--texto2)">Anticipo: KEVIN FABIAN GUERRERO TORRES — CARBURADOR SHINDAIWA B-45</td>
+      <td><span class="badge verde">💵 Efectivo</span></td>
+      <td style="font-weight:500">$65.000</td>
+      <td style="color:var(--rosa-oscuro);font-weight:500">$23.400</td>
+      <td><i class="ti ti-receipt" style="color:var(--rosa-medio);font-size:16px"></i></td>
+    </tr>
+    <tr class="fila-venta-clickeable" data-id="qh0xu1ppo4emt1kbi8m">
+      <td>08:34 a. m.</td>
+      <td style="font-size:13px">Anticipo — CARBURADOR SHINDAIWA B-45 x1</td>
+      <td style="font-size:13px;color:var(--texto2)">Anticipo: KEVIN FABIAN GUERRERO TORRES — CARBURADOR SHINDAIWA B-45</td>
+      <td><span class="badge verde">💵 Efectivo</span></td>
+      <td style="font-weight:500">$60.000</td>
+      <td style="color:var(--rosa-oscuro);font-weight:500">$21.600</td>
+      <td><i class="ti ti-receipt" style="color:var(--rosa-medio);font-size:16px"></i></td>
+    </tr>
+    <tr class="fila-venta-clickeable" data-id="nn2xe0zjetmt1k6p8a">
+      <td>08:31 a. m.</td>
+      <td style="font-size:13px">CARBURADOR SHINDAIWA B-45 x1</td>
+      <td style="font-size:13px;color:var(--texto2)">-</td>
+      <td><span class="badge rosa">🏦 Transferencia</span></td>
+      <td style="font-weight:500">$110.000</td>
+      <td style="color:var(--rosa-oscuro);font-weight:500">$30.000</td>
+      <td><i class="ti ti-receipt" style="color:var(--rosa-medio);font-size:16px"></i></td>
+    </tr>
+    <tr class="fila-venta-clickeable" data-id="lhsjnj6d0ogmt1k4gie">
+      <td>08:29 a. m.</td>
+      <td style="font-size:13px">Abono deuda — CARBURADOR SHINDAIWA B-45 x1</td>
+      <td style="font-size:13px;color:var(--texto2)">Abono deuda: KEVIN FABIAN GUERRERO TORRES — CARBURADOR SHINDAIWA B-45</td>
+      <td><span class="badge verde">💵 Efectivo</span></td>
+      <td style="font-weight:500">$60.000</td>
+      <td style="color:var(--rosa-oscuro);font-weight:500">$21.600</td>
+      <td><i class="ti ti-receipt" style="color:var(--rosa-medio);font-size:16px"></i></td>
+    </tr></tbody></table></div></div>
         </div>
       </section>
 
@@ -432,19 +498,12 @@
       </div>
       <button type="button" class="btn-secundario" id="btn-nuevo-cliente-deudor" style="margin-bottom:1rem"><i class="ti ti-user-plus"></i> Nuevo cliente</button>
 
-      <p style="font-size:11px;color:var(--texto2);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Producto que lleva (opcional)</p>
+      <p style="font-size:11px;color:var(--texto2);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Productos que lleva (opcional)</p>
       <div id="deudor-producto-busqueda-box">
         <input type="text" id="deudor-producto-buscar" placeholder="Buscar por nombre o código...">
         <div id="deudor-producto-resultados"></div>
       </div>
-      <div id="deudor-producto-seleccionado" class="producto-seleccionado-box hidden">
-        <div class="producto-seleccionado-info">
-          <strong id="deudor-producto-nombre"></strong>
-          <span id="deudor-producto-detalle"></span>
-        </div>
-        <button type="button" class="btn-peligro" id="btn-quitar-producto-deudor" style="padding:6px 10px"><i class="ti ti-x"></i></button>
-      </div>
-      <input type="number" id="deudor-cantidad" placeholder="Cantidad" min="1" value="1" class="hidden">
+      <div id="deudor-productos-lista" style="margin-bottom:10px"></div>
 
       <input type="number" id="deudor-monto" placeholder="Monto total de la deuda *">
       <input type="number" id="deudor-anticipo" placeholder="¿Cuánto paga ahora? (opcional)">
@@ -484,19 +543,12 @@
       </div>
       <button type="button" class="btn-secundario" id="btn-nuevo-cliente-anticipo" style="margin-bottom:1rem"><i class="ti ti-user-plus"></i> Nuevo cliente</button>
 
-      <p style="font-size:11px;color:var(--texto2);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Producto</p>
+      <p style="font-size:11px;color:var(--texto2);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Productos que lleva (opcional)</p>
       <div id="anticipo-producto-busqueda-box">
         <input type="text" id="anticipo-producto-buscar" placeholder="Buscar por nombre o código...">
         <div id="anticipo-producto-resultados"></div>
       </div>
-      <div id="anticipo-producto-seleccionado" class="producto-seleccionado-box hidden">
-        <div class="producto-seleccionado-info">
-          <strong id="anticipo-producto-nombre"></strong>
-          <span id="anticipo-producto-detalle"></span>
-        </div>
-        <button type="button" class="btn-peligro" id="btn-quitar-producto-anticipo" style="padding:6px 10px"><i class="ti ti-x"></i></button>
-      </div>
-      <input type="number" id="anticipo-cantidad" placeholder="Cantidad" min="1" value="1" class="hidden">
+      <div id="anticipo-productos-lista" style="margin-bottom:10px"></div>
 
       <input type="number" id="anticipo-monto" placeholder="Monto total *">
       <input type="number" id="anticipo-inicial" placeholder="¿Cuánto paga ahora? (opcional)">
@@ -636,7 +688,7 @@
     <div id="proveedor-print-contenido"></div>
   </div>
 
-  <div id="toast"></div>
+  <div id="toast" class="">Datos sincronizados ✓</div>
   <script src="app.js"></script>
 
 </body></html>
