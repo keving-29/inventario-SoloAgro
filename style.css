@@ -14,7 +14,7 @@
   --texto2:      #5C6B60;
   --texto3:      #AAB8AE;
   --fondo:       #F4F0E6;
-  --card:        #FFFFFF;
+  --card:        #FBF9F3;
   --borde:       #E3DCC8;
   --sombra:      0 2px 12px rgba(23,74,50,0.10);
   --radio:       12px;
@@ -130,8 +130,8 @@ body {
 
 /* TOPBAR */
 #topbar {
-  background: var(--card);
-  border-bottom: 0.5px solid var(--borde);
+  background: var(--rosa);
+  border-bottom: none;
   height: 60px;
   padding: 0 1.5rem;
   display: flex;
@@ -141,7 +141,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: 0 2px 8px rgba(31,122,77,0.06);
+  box-shadow: 0 2px 8px rgba(23,74,50,0.15);
 }
 
 #btn-menu-toggle {
@@ -149,7 +149,7 @@ body {
   background: none;
   border: none;
   font-size: 22px;
-  color: var(--rosa);
+  color: #fff;
   cursor: pointer;
   padding: 4px;
   margin-right: auto;
@@ -158,7 +158,7 @@ body {
 #topbar-titulo { display: block; font-family: var(--fuente-titulo); font-size: 18px; color: #fff; font-weight: 600; line-height: 1.2; }
 #topbar-sub { display: block; font-size: 10px; color: rgba(255,255,255,0.65); text-transform: uppercase; letter-spacing: 1px; font-weight: 300; }
 #topbar-right { display: flex; align-items: center; gap: 10px; }
-#topbar-user { font-size: 12px; color: var(--texto2); }
+#topbar-user { font-size: 12px; color: rgba(255,255,255,0.85); }
 
 #sync-status { font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 500; }
 #sync-status.conectado  { background: var(--malva-claro); color: var(--malva); }
@@ -651,15 +651,13 @@ input:focus, select:focus { border-color: var(--rosa-medio); background: var(--c
 #tp-firmas .tp-linea { border-top: 1px solid #000; margin-bottom: 6px; }
 
 @media print {
-  body * { visibility: hidden; }
-  #traslado-print.activo, #traslado-print.activo *,
-  #venta-print.activo, #venta-print.activo *,
-  #deudor-print.activo, #deudor-print.activo *,
-  #proveedor-print.activo, #proveedor-print.activo * { visibility: visible; }
+  /* Antes se ocultaba todo con visibility:hidden, pero eso deja el layout
+     completo (sidebar, topbar, paneles) ocupando su espacio normal aunque no
+     se vea, y eso generaba una segunda hoja en blanco al imprimir. Ocultando
+     con display:none el contenido realmente sale del flujo del documento. */
+  #login-screen, #app, #toast { display: none !important; }
   #traslado-print.activo, #venta-print.activo, #deudor-print.activo, #proveedor-print.activo {
-    display: block;
-    position: absolute;
-    top: 0; left: 0;
+    display: block !important;
     width: 100%;
     padding: 20px;
     color: #000;

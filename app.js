@@ -93,12 +93,21 @@ async function sheetsLeer(ventasDias) {
   }
 }
 
-async function sheetsEscribir(accion, hoja, datos, fila) {
+// filaOId: número de fila fija (ej. la fila 2 de Config) o el id del registro
+// (para Productos/Ventas/Deudores/Anticipos/Proveedores/Gastos). Usar el id en
+// vez de calcular la fila a partir de la posición en el array local evita que
+// un update/delete caiga en la fila equivocada cuando el array local y las
+// filas reales de la hoja quedan desalineados (por una fila vieja, un delete
+// anterior, o una sincronización a medio camino).
+async function sheetsEscribir(accion, hoja, datos, filaOId) {
   try {
     setSyncStatus('cargando');
+    const body = { action: accion, sheet: hoja, data: datos };
+    if (typeof filaOId === 'number') body.row = filaOId;
+    else if (filaOId) body.id = filaOId;
     const r = await fetchConTimeout(SCRIPT_URL, {
       method: 'POST',
-      body: JSON.stringify({ action: accion, sheet: hoja, data: datos, row: fila })
+      body: JSON.stringify(body)
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     setSyncStatus('conectado');
@@ -848,271 +857,52 @@ function deudaVencida(d) {
 // Registra un pago (anticipo o abono) contra una deuda/anticipo: queda como abono
 // Y ADEMÁS entra a la caja del día como una venta más (efectivo o transferencia).
 async function registrarPagoDeuda(entidad, tipo, monto, metodoPago) {
-
   const ahora = new Date();
-
-  // =============================================
-  // REGISTRAR EL ABONO EN LA ENTIDAD
-  // =============================================
-
   entidad.abonos = entidad.abonos || [];
-
-  entidad.abonos.push({
-    id: uid(),
-    monto: Number(monto) || 0,
-    metodoPago,
-    fecha: fechaCO(ahora),
-    hora: horaCO(ahora)
-  });
-
-
-  // =============================================
-  // CALCULAR COSTO Y GANANCIA
-  // =============================================
+  entidad.abonos.push({ id: uid(), monto, metodoPago, fecha: fechaCO(ahora), hora: horaCO(ahora) });
 
   const productos = entidad.productos || [];
-
   let costoTotal = 0;
-
   productos.forEach(pr => {
-
-    const p = DB.productos.find(
-      x => x.id === pr.productoId
-    );
-
-    if (p) {
-
-      costoTotal +=
-        p.pcompra * (pr.cantidad || 0);
-
-    }
-
+    const p = DB.productos.find(x => x.id===pr.productoId);
+    if (p) costoTotal += p.pcompra * (pr.cantidad||0);
   });
-
-
-  const gananciaTotal =
-    entidad.monto - costoTotal;
-
-
-  const gananciaPago =
-    entidad.monto > 0
-      ? monto * (gananciaTotal / entidad.monto)
-      : 0;
-
-
-  // =============================================
-  // CREAR MOVIMIENTO DE CAJA
-  // =============================================
-
-  const etiqueta =
-    tipo === 'deudor'
-      ? 'Abono deuda'
-      : 'Anticipo';
-
-
-  const nombresProductos =
-    productos
-      .map(p => p.productoNombre)
-      .join(', ');
-
+  const gananciaTotal = entidad.monto - costoTotal;
+  const gananciaPago = entidad.monto>0 ? monto * (gananciaTotal/entidad.monto) : 0;
+  const etiqueta = tipo==='deudor' ? 'Abono deuda' : 'Anticipo';
+  const nombresProductos = productos.map(p=>p.productoNombre).join(', ');
 
   const itemsBoucher = productos.length
-
-    ? productos.map(pr => ({
-
-        ref: pr.ref || '-',
-
-        nombre: pr.productoNombre,
-
-        cantidad: pr.cantidad,
-
-        precio: pr.precioUnit,
-
-        total:
-          pr.precioUnit * pr.cantidad
-
-      }))
-
-    : [{
-
-        ref: '-',
-
-        nombre: etiqueta,
-
-        cantidad: 1,
-
-        precio: monto,
-
-        total: monto
-
-      }];
-
+    ? productos.map(pr => ({ ref: pr.ref||'-', nombre: pr.productoNombre, cantidad: pr.cantidad, precio: pr.precioUnit, total: pr.precioUnit*pr.cantidad }))
+    : [{ ref:'-', nombre: etiqueta, cantidad:1, precio: monto, total: monto }];
 
   const venta = {
-
-    id: uid(),
-
-    fecha: fechaCO(ahora),
-
-    hora: horaCO(ahora),
-
-    total: monto,
-
-    ganancia: gananciaPago,
-
-    nota: nombresProductos
-      ? `${etiqueta} de: ${nombresProductos}`
-      : etiqueta,
-
+    id: uid(), fecha: fechaCO(ahora), hora: horaCO(ahora),
+    total: monto, ganancia: gananciaPago,
+    nota: nombresProductos ? `${etiqueta} de: ${nombresProductos}` : etiqueta,
     metodoPago,
-
     items: itemsBoucher,
-
-    clienteId:
-      entidad.clienteId || '',
-
-    clienteNombre:
-      entidad.nombre || '',
-
-    clienteCedula:
-      entidad.cedula || '',
-
-    clienteTelefono:
-      entidad.telefono || '',
-
-    clienteDireccion:
-      entidad.direccion || '',
-
+    clienteId: entidad.clienteId||'', clienteNombre: entidad.nombre||'',
+    clienteCedula: entidad.cedula||'', clienteTelefono: entidad.telefono||'',
+    clienteDireccion: entidad.direccion||'',
     pagadoAhora: monto,
-
-    saldoPendiente:
-      calcularSaldo(entidad)
-
+    saldoPendiente: calcularSaldo(entidad)
   };
-
-
   DB.ventas.push(venta);
+  await sheetsEscribir('append','Ventas',[venta.id,venta.fecha,venta.hora,venta.total,venta.ganancia,venta.nota,venta.metodoPago,JSON.stringify(venta.items),venta.clienteId,venta.clienteNombre,venta.clienteCedula,venta.clienteTelefono,venta.clienteDireccion,venta.pagadoAhora,venta.saldoPendiente]);
 
+  entidad.pagada = calcularSaldo(entidad) <= 0;
 
-  // =============================================
-  // GUARDAR MOVIMIENTO EN VENTAS
-  // =============================================
-
-  await sheetsEscribir(
-    'append',
-    'Ventas',
-    [
-      venta.id,
-      venta.fecha,
-      venta.hora,
-      venta.total,
-      venta.ganancia,
-      venta.nota,
-      venta.metodoPago,
-      JSON.stringify(venta.items),
-      venta.clienteId,
-      venta.clienteNombre,
-      venta.clienteCedula,
-      venta.clienteTelefono,
-      venta.clienteDireccion,
-      venta.pagadoAhora,
-      venta.saldoPendiente
-    ]
-  );
-
-
-  // =============================================
-  // ACTUALIZAR ESTADO DE LA DEUDA / ANTICIPO
-  // =============================================
-
-  entidad.pagada =
-    calcularSaldo(entidad) <= 0;
-
-
-  // =============================================
-  // GUARDAR EL ABONO EN SU HOJA
-  // =============================================
-
-  if (tipo === 'deudor') {
-
-    await guardarDeudorEnSheet(
-      entidad,
-      false
-    );
-
-  } else {
-
-    await guardarAnticipoEnSheet(
-      entidad,
-      false
-    );
-
-  }
-
-
-  // =============================================
-  // SI ES ANTICIPO Y YA ESTÁ PAGADO,
-  // DESCONTAR PRODUCTOS DEL INVENTARIO
-  // =============================================
-
-  if (
-    tipo === 'anticipo' &&
-    entidad.pagada &&
-    productos.length &&
-    !entidad.descontado
-  ) {
-
+  if (tipo==='anticipo' && entidad.pagada && productos.length && !entidad.descontado) {
     for (const pr of productos) {
-
-      const p = DB.productos.find(
-        x => x.id === pr.productoId
-      );
-
+      const p = DB.productos.find(x => x.id===pr.productoId);
       if (p) {
-
-        p.stock = Math.max(
-          0,
-          p.stock - (pr.cantidad || 0)
-        );
-
-
-        const idxP =
-          DB.productos.findIndex(
-            x => x.id === p.id
-          );
-
-
-        await sheetsEscribir(
-          'update',
-          'Productos',
-          [
-            p.id,
-            p.ref,
-            p.nombre,
-            p.pcompra,
-            p.pventa1,
-            p.pventa2,
-            p.stock
-          ],
-          idxP + 2
-        );
-
+        p.stock = Math.max(0, p.stock - (pr.cantidad||0));
+        await sheetsEscribir('update','Productos',[p.id,p.ref,p.nombre,p.pcompra,p.pventa1,p.pventa2,p.stock],p.id);
       }
-
     }
-
-
     entidad.descontado = true;
-
-
-    // Guardar nuevamente porque cambió descontado
-    await guardarAnticipoEnSheet(
-      entidad,
-      false
-    );
-
   }
-
 }
 
 function imprimirBoucherDeuda(d, tipo) {
@@ -1273,10 +1063,7 @@ function renderProductosDeudor() {
 async function guardarDeudorEnSheet(d, esNuevo) {
   const fila = [d.id,d.clienteId,d.nombre,d.cedula,d.telefono,d.direccion,JSON.stringify(d.productos||[]),d.monto,d.nota,d.fecha,d.hora,d.fechaLimite,JSON.stringify(d.abonos),d.pagada];
   if (esNuevo) { await sheetsEscribir('append','Deudores',fila); }
-  else {
-    const idx = DB.deudores.findIndex(x=>x.id===d.id);
-    await sheetsEscribir('update','Deudores',fila,idx+2);
-  }
+  else { await sheetsEscribir('update','Deudores',fila,d.id); }
 }
 
 function abrirModalDeudor(id) {
@@ -1344,8 +1131,7 @@ async function guardarDeudor() {
     const p = DB.productos.find(x => x.id===item.productoId);
     if (p) {
       p.stock = Math.max(0, p.stock - item.cantidad);
-      const idxP = DB.productos.findIndex(x => x.id===p.id);
-      await sheetsEscribir('update','Productos',[p.id,p.ref,p.nombre,p.pcompra,p.pventa1,p.pventa2,p.stock],idxP+2);
+      await sheetsEscribir('update','Productos',[p.id,p.ref,p.nombre,p.pcompra,p.pventa1,p.pventa2,p.stock],p.id);
     }
   }
 
@@ -1358,19 +1144,28 @@ async function guardarDeudor() {
     abonos: [], pagada: false
   };
   DB.deudores.push(nuevo);
-  await guardarDeudorEnSheet(nuevo, true);
 
-  if (anticipo > 0) await registrarPagoDeuda(nuevo, 'deudor', anticipo, metodoPago);
+// Primero registramos el anticipo para que quede dentro de nuevo.abonos
+if (anticipo > 0) {
+  await registrarPagoDeuda(nuevo, 'deudor', anticipo, metodoPago);
+}
 
-  guardarLocal(); btn.textContent='Guardar'; btn.disabled=false;
-  cerrarModal('modal-deudor'); renderDeudores(); renderDashboard();
-  mostrarToast('Deudor agregado ✓ (usa el botón de imprimir para el boucher)');
+// Ahora guardamos la deuda YA con el abono incluido
+await guardarDeudorEnSheet(nuevo, true);
+
+guardarLocal();
+btn.textContent='Guardar';
+btn.disabled=false;
+cerrarModal('modal-deudor');
+renderDeudores();
+renderDashboard();
+
+mostrarToast('Deudor agregado ✓ (usa el botón de imprimir para el boucher)');
 }
 
 async function eliminarDeudor(id) {
   if (!confirm('¿Eliminar este deudor?')) return;
-  const idx = DB.deudores.findIndex(d => d.id===id);
-  await sheetsEscribir('delete','Deudores',null,idx+2);
+  await sheetsEscribir('delete','Deudores',null,id);
   DB.deudores = DB.deudores.filter(d => d.id!==id);
   guardarLocal(); renderDeudores(); mostrarToast('Deudor eliminado');
 }
@@ -1483,10 +1278,7 @@ function renderProductosAnticipo() {
 async function guardarAnticipoEnSheet(a, esNuevo) {
   const fila = [a.id,a.clienteId,a.nombre,a.cedula,a.telefono,a.direccion,JSON.stringify(a.productos||[]),a.monto,a.nota,a.fecha,a.hora,a.fechaLimite,JSON.stringify(a.abonos),a.pagada,a.descontado];
   if (esNuevo) { await sheetsEscribir('append','Anticipos',fila); }
-  else {
-    const idx = DB.anticipos.findIndex(x=>x.id===a.id);
-    await sheetsEscribir('update','Anticipos',fila,idx+2);
-  }
+  else { await sheetsEscribir('update','Anticipos',fila,a.id); }
 }
 
 function abrirModalAnticipo(id) {
@@ -1569,8 +1361,7 @@ async function guardarAnticipo() {
 
 async function eliminarAnticipo(id) {
   if (!confirm('¿Eliminar este anticipo?')) return;
-  const idx = DB.anticipos.findIndex(a => a.id===id);
-  await sheetsEscribir('delete','Anticipos',null,idx+2);
+  await sheetsEscribir('delete','Anticipos',null,id);
   DB.anticipos = DB.anticipos.filter(a => a.id!==id);
   guardarLocal(); renderAnticipos(); mostrarToast('Anticipo eliminado');
 }
@@ -1633,10 +1424,7 @@ function proveedorPorVencer(p) {
 async function guardarProveedorEnSheet(p, esNuevo) {
   const fila = [p.id,p.empresa,p.fechaLlegadaPedido,p.monto,p.numeroCuotas,p.fechaLimite,p.fecha,p.hora,JSON.stringify(p.abonos),p.pagada];
   if (esNuevo) { await sheetsEscribir('append','Proveedores',fila); }
-  else {
-    const idx = DB.proveedores.findIndex(x=>x.id===p.id);
-    await sheetsEscribir('update','Proveedores',fila,idx+2);
-  }
+  else { await sheetsEscribir('update','Proveedores',fila,p.id); }
 }
 
 function abrirModalProveedor() {
@@ -1674,8 +1462,7 @@ async function guardarProveedor() {
 
 async function eliminarProveedor(id) {
   if (!confirm('¿Eliminar esta factura de proveedor?')) return;
-  const idx = DB.proveedores.findIndex(p => p.id===id);
-  await sheetsEscribir('delete','Proveedores',null,idx+2);
+  await sheetsEscribir('delete','Proveedores',null,id);
   DB.proveedores = DB.proveedores.filter(p => p.id!==id);
   guardarLocal(); renderProveedores(); mostrarToast('Factura eliminada');
 }
@@ -1841,8 +1628,7 @@ async function guardarGasto() {
 
 async function eliminarGasto(id) {
   if (!confirm('¿Eliminar este gasto?')) return;
-  const idx = DB.gastos.findIndex(g => g.id===id);
-  await sheetsEscribir('delete','Gastos',null,idx+2);
+  await sheetsEscribir('delete','Gastos',null,id);
   DB.gastos = DB.gastos.filter(g => g.id!==id);
   guardarLocal(); renderGastos(); mostrarToast('Gasto eliminado');
 }
@@ -2116,8 +1902,7 @@ async function guardarProducto() {
     const p = DB.productos.find(x => x.id===editandoProductoId);
     if (p) {
       Object.assign(p,{ref,nombre,pcompra,pventa1,pventa2,stock});
-      const idx = DB.productos.findIndex(x => x.id===editandoProductoId);
-      await sheetsEscribir('update','Productos',[p.id,p.ref,p.nombre,p.pcompra,p.pventa1,p.pventa2,p.stock],idx+2);
+      await sheetsEscribir('update','Productos',[p.id,p.ref,p.nombre,p.pcompra,p.pventa1,p.pventa2,p.stock],p.id);
     }
   } else {
     const nuevo={id:uid(),ref,nombre,pcompra,pventa1,pventa2,stock};
@@ -2132,8 +1917,7 @@ async function guardarProducto() {
 
 async function eliminarProducto(id) {
   if (!confirm('¿Eliminar este producto?')) return;
-  const idx = DB.productos.findIndex(p => p.id===id);
-  await sheetsEscribir('delete','Productos',null,idx+2);
+  await sheetsEscribir('delete','Productos',null,id);
   DB.productos = DB.productos.filter(p => p.id!==id);
   guardarLocal(); renderInventario(); mostrarToast('Producto eliminado');
 }
@@ -2370,8 +2154,7 @@ async function confirmarVenta() {
     const p = DB.productos.find(x=>x.id===item.id);
     if (p) {
       p.stock=Math.max(0,p.stock-item.cantidad);
-      const idx=DB.productos.findIndex(x=>x.id===item.id);
-      await sheetsEscribir('update','Productos',[p.id,p.ref,p.nombre,p.pcompra,p.pventa1,p.pventa2,p.stock],idx+2);
+      await sheetsEscribir('update','Productos',[p.id,p.ref,p.nombre,p.pcompra,p.pventa1,p.pventa2,p.stock],p.id);
     }
   }
 
@@ -2385,7 +2168,8 @@ async function confirmarVenta() {
   await sheetsEscribir('append','Ventas',[venta.id,venta.fecha,venta.hora,venta.total,venta.ganancia,venta.nota,venta.metodoPago,JSON.stringify(venta.items),venta.clienteId,venta.clienteNombre,venta.clienteCedula,venta.clienteTelefono,venta.clienteDireccion,'','']);
 
   guardarLocal();
-  mostrarToast(`Venta registrada · ${metodoPago==='transferencia'?'🏦':'💵'} ${fmt(total)}. Tócala en "Ventas de hoy" para imprimir el boucher.`);
+  mostrarToast(`Venta registrada · ${metodoPago==='transferencia'?'🏦':'💵'} ${fmt(total)}`);
+  imprimirBoucher(venta);
 
   carrito=[];
   renderCarrito();
