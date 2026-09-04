@@ -1144,23 +1144,13 @@ async function guardarDeudor() {
     abonos: [], pagada: false
   };
   DB.deudores.push(nuevo);
+  await guardarDeudorEnSheet(nuevo, true);
 
-// Primero registramos el anticipo para que quede dentro de nuevo.abonos
-if (anticipo > 0) {
-  await registrarPagoDeuda(nuevo, 'deudor', anticipo, metodoPago);
-}
+  if (anticipo > 0) await registrarPagoDeuda(nuevo, 'deudor', anticipo, metodoPago);
 
-// Ahora guardamos la deuda YA con el abono incluido
-await guardarDeudorEnSheet(nuevo, true);
-
-guardarLocal();
-btn.textContent='Guardar';
-btn.disabled=false;
-cerrarModal('modal-deudor');
-renderDeudores();
-renderDashboard();
-
-mostrarToast('Deudor agregado ✓ (usa el botón de imprimir para el boucher)');
+  guardarLocal(); btn.textContent='Guardar'; btn.disabled=false;
+  cerrarModal('modal-deudor'); renderDeudores(); renderDashboard();
+  mostrarToast('Deudor agregado ✓ (usa el botón de imprimir para el boucher)');
 }
 
 async function eliminarDeudor(id) {
@@ -1729,6 +1719,154 @@ function renderDashboard() {
 }
 
 // =============================================
+// NUEVO — IMPRESIÓN TÉRMICA POS (QZ Tray + ESC/POS)
+// =============================================
+// Todo este bloque es nuevo. Conecta con QZ Tray (una aplicación que corre
+// en el Windows del local) para mandar el ticket directo a la impresora
+// térmica CX-POS CX-20 usando comandos ESC/POS crudos, en vez de mandar
+// HTML al diálogo de impresión de Chrome (que es lo que no formateaba bien
+// el ticket con el driver "Generic / Text Only"). Si QZ Tray no está
+// instalado o no está corriendo, no rompe nada: quien llama a posImprimir()
+// recibe un error y decide usar el respaldo de impresión por HTML de
+// siempre — ver imprimirBoucher() más abajo.
+
+const POS_IMPRESORA = 'CX-POS Soloagro'; // debe coincidir EXACTO con el nombre de la impresora en Windows
+const POS_ANCHO = 42;      // caracteres por línea en papel de 72mm (súbelo a 48 si tu impresora imprime más angosto el texto)
+const POS_CODEPAGE = 'IBM437'; // nombre de charset que usa QZ Tray para CP437
+
+const POS_ESC = '\x1B';
+const POS_GS  = '\x1D';
+const POS_INIT        = POS_ESC + '@';
+const POS_ALINEAR_IZQ = POS_ESC + 'a' + '\x00';
+const POS_ALINEAR_CEN = POS_ESC + 'a' + '\x01';
+const POS_NEGRITA_ON  = POS_ESC + 'E' + '\x01';
+const POS_NEGRITA_OFF = POS_ESC + 'E' + '\x00';
+const POS_ALTO_ON     = POS_GS  + '!' + '\x01'; // doble alto (para el nombre del negocio)
+const POS_ALTO_OFF    = POS_GS  + '!' + '\x00';
+const POS_CORTE       = '\n\n\n' + POS_GS + 'V' + '\x01'; // alimenta papel y corta (AutoCut activado en la impresora)
+
+let qzSeguridadConfigurada = false;
+let qzConectando = null;
+
+// CP437 sí trae tildes y la ñ española, pero no emojis ni comillas "curvas"
+// ni rayas largas — esos se reemplazan por su equivalente en ASCII para que
+// no salgan símbolos raros en el papel (evita mandar Unicode que el
+// CodePage 437 de la impresora no sepa interpretar).
+function posLimpiarTexto(texto) {
+  return String(texto == null ? '' : texto)
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, '-')
+    .replace(/[^\x00-\x7FÁÉÍÓÚáéíóúÑñ¿¡]/g, '');
+}
+
+function posRepetir(caracter, veces) { return new Array(Math.max(0, veces) + 1).join(caracter); }
+
+function posTruncar(texto, ancho) {
+  texto = posLimpiarTexto(texto);
+  return texto.length > ancho ? texto.slice(0, Math.max(0, ancho - 1)) + '.' : texto;
+}
+
+function posColumnas(codigo, producto, cant, precio) {
+  const cCod = 12, cProd = 15, cCant = 5;
+  const cPrecio = POS_ANCHO - cCod - cProd - cCant;
+  const col1 = posTruncar(codigo, cCod - 1).padEnd(cCod);
+  const col2 = posTruncar(producto, cProd - 1).padEnd(cProd);
+  const col3 = String(cant).padStart(cCant);
+  const col4 = String(precio).padStart(cPrecio);
+  return col1 + col2 + col3 + col4;
+}
+
+function posLinea() { return posRepetir('-', POS_ANCHO) + '\n'; }
+
+// Arma el texto completo del ticket de una venta (ESC/POS + texto plano),
+// listo para mandar a la impresora térmica. Usa exactamente los mismos
+// campos de "venta" que ya usa imprimirBoucher() — no inventa datos nuevos.
+function construirTicketVentaPOS(venta) {
+  const metodoTexto = venta.metodoPago === 'transferencia' ? 'Transferencia' : 'Efectivo';
+  let t = '';
+
+  t += POS_INIT;
+  t += POS_ALINEAR_CEN;
+  t += POS_ALTO_ON + POS_NEGRITA_ON;
+  t += posLimpiarTexto('MULTIREPUESTOS SOLOAGRO') + '\n';
+  t += POS_ALTO_OFF + POS_NEGRITA_OFF;
+  t += posLimpiarTexto('COMPROBANTE DE VENTA') + '\n';
+  t += POS_ALINEAR_IZQ;
+  t += posLinea();
+  t += `Fecha: ${posLimpiarTexto(venta.fecha)}    Hora: ${posLimpiarTexto(venta.hora)}\n`;
+
+  if (venta.clienteNombre) {
+    t += posLinea();
+    t += `Cliente: ${posLimpiarTexto(venta.clienteNombre)}\n`;
+    if (venta.clienteCedula) t += `Cedula: ${posLimpiarTexto(venta.clienteCedula)}\n`;
+    if (venta.clienteTelefono) t += `Telefono: ${posLimpiarTexto(venta.clienteTelefono)}\n`;
+    if (venta.clienteDireccion) t += `Direccion: ${posLimpiarTexto(venta.clienteDireccion)}\n`;
+  }
+
+  if (venta.nota) {
+    t += posLinea();
+    t += `Nota: ${posLimpiarTexto(venta.nota)}\n`;
+  }
+
+  t += posLinea();
+  t += POS_NEGRITA_ON + posColumnas('Codigo', 'Producto', 'Cant', 'Precio') + '\n' + POS_NEGRITA_OFF;
+  t += posLinea();
+
+  venta.items.forEach(i => {
+    t += posColumnas(i.ref || '-', i.nombre, i.cantidad, fmt(i.precio)) + '\n';
+  });
+
+  t += posLinea();
+  t += POS_NEGRITA_ON;
+  const etiquetaTotal = venta.saldoPendiente !== undefined ? 'PAGADO AHORA' : 'TOTAL';
+  t += `${etiquetaTotal}:`.padEnd(POS_ANCHO - 12) + fmt(venta.total).padStart(12) + '\n';
+  t += POS_NEGRITA_OFF;
+  if (venta.saldoPendiente !== undefined) {
+    t += 'FALTA POR CANCELAR:'.padEnd(POS_ANCHO - 12) + fmt(venta.saldoPendiente).padStart(12) + '\n';
+  }
+  t += `Metodo de pago: ${metodoTexto}\n`;
+  t += posLinea();
+  t += POS_ALINEAR_CEN;
+  t += posLimpiarTexto('GRACIAS POR SU COMPRA') + '\n';
+  t += POS_ALINEAR_IZQ;
+  t += POS_CORTE;
+
+  return t;
+}
+
+// Conecta con QZ Tray si todavía no hay conexión activa. Lanza un error con
+// mensaje entendible si la librería no cargó o QZ Tray no está corriendo.
+async function posConectarQZ() {
+  if (typeof qz === 'undefined') {
+    throw new Error('La librería de QZ Tray no cargó en la página.');
+  }
+  if (!qzSeguridadConfigurada) {
+    // Modo sin certificado: QZ Tray muestra un aviso pidiendo permitir la
+    // conexión la primera vez (ahí mismo se puede marcar "recordar").
+    qz.security.setCertificatePromise(function (resolve) { resolve(); });
+    qz.security.setSignaturePromise(function () {
+      return function (resolve) { resolve(); };
+    });
+    qzSeguridadConfigurada = true;
+  }
+  if (qz.websocket.isActive()) return;
+  if (!qzConectando) {
+    qzConectando = qz.websocket.connect().finally(() => { qzConectando = null; });
+  }
+  await qzConectando;
+}
+
+// Envía un ticket (texto con comandos ESC/POS ya incluidos) a POS_IMPRESORA
+// a través de QZ Tray. Quien llama a esta función debe capturar el error y
+// decidir si usa el respaldo de impresión por HTML.
+async function posImprimir(texto) {
+  await posConectarQZ();
+  const config = qz.configs.create(POS_IMPRESORA, { encoding: POS_CODEPAGE });
+  await qz.print(config, [texto]);
+}
+
+// =============================================
 // FACTURA
 // =============================================
 function abrirFactura(venta) {
@@ -1781,7 +1919,12 @@ function abrirFactura(venta) {
 }
 
 // Boucher de impresión — no muestra ganancias
-function imprimirBoucher(venta) {
+// Respaldo de siempre: construye el boucher en HTML y lo manda al diálogo
+// de impresión del navegador (window.print()). Es EXACTAMENTE el mismo
+// código que había antes en imprimirBoucher() — solo se le cambió el
+// nombre, para poder usarlo como respaldo cuando la impresión térmica POS
+// (más abajo) no esté disponible.
+function imprimirBoucherHTML(venta) {
   const metodoTexto = venta.metodoPago === 'transferencia' ? 'Transferencia' : 'Efectivo';
 
   const filas = venta.items.map(i => `
@@ -1820,6 +1963,68 @@ function imprimirBoucher(venta) {
 
   prepararImpresion('venta-print');
   window.print();
+}
+
+// NUEVO — imprimirBoucher(venta) ahora intenta primero la impresión térmica
+// POS (QZ Tray + ESC/POS, ticket de 72mm con corte automático). Si QZ Tray
+// no está instalado, no está corriendo, o la impresora POS_IMPRESORA no
+// aparece, cae automáticamente al respaldo de siempre (imprimirBoucherHTML,
+// ventana de impresión de Chrome) para que nunca se quede sin poder
+// imprimir. Se mantiene el mismo nombre de función para no tener que tocar
+// ningún otro lugar del código que ya llama a imprimirBoucher(venta).
+async function imprimirBoucher(venta) {
+  try {
+    const ticket = construirTicketVentaPOS(venta);
+    await posImprimir(ticket);
+    mostrarToast('Ticket enviado a la impresora ✓');
+  } catch (err) {
+    console.warn('Impresión térmica POS no disponible, usando respaldo HTML:', err);
+    mostrarToast('Impresora térmica no disponible (' + (err && err.message ? err.message : 'sin conexión con QZ Tray') + '). Se usó la impresión del navegador.');
+    imprimirBoucherHTML(venta);
+  }
+}
+
+// NUEVO — botón de diagnóstico en Config ("Probar impresora"). Manda un
+// ticket corto de prueba y explica con alert() exactamente qué falló, para
+// poder revisar la conexión con QZ Tray sin depender de la consola del
+// navegador. No se usa durante una venta real: solo cuando el usuario
+// aprieta el botón de prueba.
+async function probarImpresoraPOS() {
+  try {
+    await posConectarQZ();
+
+    const impresoras = await qz.printers.find();
+    const encontrada = impresoras.some(p => String(p).trim() === POS_IMPRESORA);
+
+    if (!encontrada) {
+      alert(
+        'QZ Tray SÍ está conectado, pero Windows no tiene ninguna impresora llamada exactamente "' + POS_IMPRESORA + '".\n\n' +
+        'Impresoras que Windows sí tiene instaladas:\n' + (impresoras.length ? impresoras.join('\n') : '(ninguna)') + '\n\n' +
+        'Revisa el nombre exacto de la impresora en Windows (Configuración > Impresoras) y que coincida con POS_IMPRESORA en app.js.'
+      );
+      return;
+    }
+
+    let ticket = POS_INIT + POS_ALINEAR_CEN + POS_NEGRITA_ON;
+    ticket += posLimpiarTexto('PRUEBA DE IMPRESORA') + '\n' + POS_NEGRITA_OFF;
+    ticket += posLimpiarTexto('Multirepuestos SoloAgro') + '\n';
+    ticket += POS_ALINEAR_IZQ + posLinea();
+    ticket += 'Si ves este ticket impreso\ncorrectamente, la impresora\nquedo bien configurada.\n';
+    ticket += posLinea() + POS_CORTE;
+
+    await posImprimir(ticket);
+    alert('✓ Ticket de prueba enviado a "' + POS_IMPRESORA + '". Si no salió nada en la impresora física, revisa el cable USB y que esté encendida.');
+
+  } catch (err) {
+    alert(
+      '✗ No se pudo conectar con la impresora térmica.\n\n' +
+      'Motivo: ' + (err && err.message ? err.message : err) + '\n\n' +
+      'Revisa que:\n' +
+      '1. QZ Tray esté instalado y CORRIENDO (ícono junto al reloj de Windows, no solo instalado).\n' +
+      '2. Hayas dado clic en "Allow"/"Permitir" en el aviso que muestra QZ Tray la primera vez que esta página se conecta.\n' +
+      '3. La impresora "' + POS_IMPRESORA + '" esté encendida y conectada por USB.'
+    );
+  }
 }
 
 // =============================================
@@ -2640,4 +2845,5 @@ document.addEventListener('DOMContentLoaded', () => {
   // Config
   document.getElementById('btn-agregar-usuario').addEventListener('click', agregarUsuario);
   document.getElementById('btn-guardar-config').addEventListener('click', guardarConfig);
+  document.getElementById('btn-probar-impresora').addEventListener('click', probarImpresoraPOS);
 });
