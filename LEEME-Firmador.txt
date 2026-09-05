@@ -1,0 +1,9 @@
+SOLOAGRO - IMPRESION DESDE GITHUB PAGES
+
+1. En tu PC conserva private-key.pem en esta carpeta. NO lo subas a GitHub.
+2. Ejecuta Iniciar-SoloAgro.bat.
+3. Se abrira una ventana del firmador local y despues GitHub Pages.
+4. Deja la ventana del firmador abierta mientras uses SoloAgro.
+5. El firmador usa Windows PowerShell 5.1, incluido normalmente en Windows.
+6. digital-certificate.txt debe ser el certificado correspondiente a private-key.pem.
+7. Si tu URL de GitHub Pages no es https://keving-29.github.io/, cambia esa unica linea del .bat.

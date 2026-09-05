@@ -1745,109 +1745,18 @@ const POS_ALTO_ON     = POS_GS  + '!' + '\x01'; // doble alto (para el nombre de
 const POS_ALTO_OFF    = POS_GS  + '!' + '\x00';
 const POS_CORTE       = '\n\n\n' + POS_GS + 'V' + '\x01'; // alimenta papel y corta (AutoCut activado en la impresora)
 
+let qzSeguridadConfigurada = false;
 let qzConectando = null;
 
-// CP437 sí trae tildes y la ñ española, pero no emojis ni comillas "curvas"
-// ni rayas largas — esos se reemplazan por su equivalente en ASCII para que
-// no salgan símbolos raros en el papel (evita mandar Unicode que el
-// CodePage 437 de la impresora no sepa interpretar).
-function posLimpiarTexto(texto) {
-  return String(texto == null ? '' : texto)
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/[–—]/g, '-')
-    .replace(/[^\x00-\x7FÁÉÍÓÚáéíóúÑñ¿¡]/g, '');
-}
-
-function posRepetir(caracter, veces) { return new Array(Math.max(0, veces) + 1).join(caracter); }
-
-function posTruncar(texto, ancho) {
-  texto = posLimpiarTexto(texto);
-  return texto.length > ancho ? texto.slice(0, Math.max(0, ancho - 1)) + '.' : texto;
-}
-
-function posColumnas(codigo, producto, cant, precio) {
-  const cCod = 12, cProd = 15, cCant = 5;
-  const cPrecio = POS_ANCHO - cCod - cProd - cCant;
-  const col1 = posTruncar(codigo, cCod - 1).padEnd(cCod);
-  const col2 = posTruncar(producto, cProd - 1).padEnd(cProd);
-  const col3 = String(cant).padStart(cCant);
-  const col4 = String(precio).padStart(cPrecio);
-  return col1 + col2 + col3 + col4;
-}
-
-function posLinea() { return posRepetir('-', POS_ANCHO) + '\n'; }
-
-// Arma el texto completo del ticket de una venta (ESC/POS + texto plano),
-// listo para mandar a la impresora térmica. Usa exactamente los mismos
-// campos de "venta" que ya usa imprimirBoucher() — no inventa datos nuevos.
-function construirTicketVentaPOS(venta) {
-  const metodoTexto = venta.metodoPago === 'transferencia' ? 'Transferencia' : 'Efectivo';
-  let t = '';
-
-  t += POS_INIT;
-  t += POS_ALINEAR_CEN;
-  t += POS_ALTO_ON + POS_NEGRITA_ON;
-  t += posLimpiarTexto('MULTIREPUESTOS SOLOAGRO') + '\n';
-  t += POS_ALTO_OFF + POS_NEGRITA_OFF;
-  t += posLimpiarTexto('COMPROBANTE DE VENTA') + '\n';
-  t += '\n';
-  t += POS_ALINEAR_IZQ;
-  t += posLinea();
-  t += `Fecha: ${posLimpiarTexto(venta.fecha)}    Hora: ${posLimpiarTexto(venta.hora)}\n`;
-
-  if (venta.clienteNombre) {
-    t += posLinea();
-    t += `Cliente: ${posLimpiarTexto(venta.clienteNombre)}\n`;
-    if (venta.clienteCedula) t += `Cedula: ${posLimpiarTexto(venta.clienteCedula)}\n`;
-    if (venta.clienteTelefono) t += `Telefono: ${posLimpiarTexto(venta.clienteTelefono)}\n`;
-    if (venta.clienteDireccion) t += `Direccion: ${posLimpiarTexto(venta.clienteDireccion)}\n`;
-  }
-
-  if (venta.nota) {
-    t += posLinea();
-    t += `Nota: ${posLimpiarTexto(venta.nota)}\n`;
-  }
-
-  t += posLinea();
-  t += POS_NEGRITA_ON + posColumnas('Codigo', 'Producto', 'Cant', 'Precio') + '\n' + POS_NEGRITA_OFF;
-  t += posLinea();
-
-  venta.items.forEach(i => {
-    t += posColumnas(i.ref || '-', i.nombre, i.cantidad, fmt(i.precio)) + '\n';
-  });
-
-  t += posLinea();
-  t += POS_ALTO_ON + POS_NEGRITA_ON;
-  const etiquetaTotal = venta.saldoPendiente !== undefined ? 'PAGADO AHORA' : 'TOTAL';
-  t += `${etiquetaTotal}:`.padEnd(POS_ANCHO - 12) + fmt(venta.total).padStart(12) + '\n';
-  t += POS_ALTO_OFF + POS_NEGRITA_OFF;
-  if (venta.saldoPendiente !== undefined) {
-    t += 'FALTA POR CANCELAR:'.padEnd(POS_ANCHO - 12) + fmt(venta.saldoPendiente).padStart(12) + '\n';
-  }
-  t += `Metodo de pago: ${metodoTexto}\n`;
-  t += posLinea();
-  t += POS_ALINEAR_CEN;
-  t += POS_ALTO_ON + POS_NEGRITA_ON;
-  t += posLimpiarTexto('GRACIAS POR SU COMPRA') + '\n';
-  t += POS_ALTO_OFF + POS_NEGRITA_OFF;
-  t += POS_ALINEAR_IZQ;
-  t += '\n\n\n\n\n\n';
-  t += POS_CORTE;
-
-  return t;
-}
-
-// Conecta con QZ Tray si todavía no hay conexión activa. Lanza un error con
-// mensaje entendible si la librería no cargó o QZ Tray no está corriendo.
+// La firma se configura en qz-security.js. Ese archivo usa un firmador local
+// para mantener private-key.pem fuera de GitHub.
 async function posConectarQZ() {
   if (typeof qz === 'undefined') {
     throw new Error('La librería de QZ Tray no cargó en la página.');
   }
   if (!window.soloAgroQZSeguridadLista) {
     throw new Error(
-      'La firma de QZ Tray no está configurada. ' +
-      'Verifica que digital-certificate.txt y private-key.pem estén en la carpeta de SoloAgro.'
+      'La firma de QZ Tray no está disponible. Ejecuta Iniciar-SoloAgro.bat y verifica que el firmador local esté activo.'
     );
   }
   if (qz.websocket.isActive()) return;
@@ -1857,9 +1766,6 @@ async function posConectarQZ() {
   await qzConectando;
 }
 
-// Envía un ticket (texto con comandos ESC/POS ya incluidos) a POS_IMPRESORA
-// a través de QZ Tray. La comunicación va firmada para permitir impresión
-// silenciosa sin el aviso Allow/Block en cada operación.
 async function posImprimir(texto) {
   await posConectarQZ();
 
@@ -1978,8 +1884,10 @@ function imprimirBoucherHTML(venta) {
   window.print();
 }
 
-// imprimirBoucher(venta) usa la impresión térmica POS
-// (QZ Tray + ESC/POS, ticket de 72mm con corte automático).
+// NUEVO — imprimirBoucher(venta) ahora intenta primero la impresión térmica
+// POS (QZ Tray + ESC/POS, ticket de 72mm con corte automático). Si QZ Tray
+// no está instalado, no está corriendo, o la impresora POS_IMPRESORA no
+// aparece, cae automáticamente al respaldo de siempre (imprimirBoucherHTML,
 // ventana de impresión de Chrome) para que nunca se quede sin poder
 // imprimir. Se mantiene el mismo nombre de función para no tener que tocar
 // ningún otro lugar del código que ya llama a imprimirBoucher(venta).

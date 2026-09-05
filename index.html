@@ -659,8 +659,12 @@
 
   <div id="toast" class="">Datos sincronizados ✓</div>
 
-  <!-- Impresión térmica POS (CX-POS CX-20) vía QZ Tray.
-       qz-security.js firma las solicitudes con las claves locales de QZ Tray. -->
+  <!-- NUEVO — Impresión térmica POS (CX-POS CX-20) vía QZ Tray.
+       Requiere tener QZ Tray instalado y corriendo en el computador con
+       Windows (ver instrucciones aparte). Si la librería no carga o QZ Tray
+       no está corriendo, app.js cae automáticamente a la impresión con
+       window.print() de toda la vida, así que esto no rompe nada si no se
+       instala QZ Tray. -->
   <script src="qz-tray.js"></script>
   <script src="qz-security.js"></script>
   <script src="app.js"></script>
