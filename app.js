@@ -1732,7 +1732,7 @@ function renderDashboard() {
 
 const POS_IMPRESORA = 'CX-POS Soloagro'; // debe coincidir EXACTO con el nombre de la impresora en Windows
 const POS_ANCHO = 42;      // caracteres por línea en papel de 72mm (súbelo a 48 si tu impresora imprime más angosto el texto)
-const POS_CODEPAGE = 'IBM437'; // nombre de charset que usa QZ Tray para CP437
+const POS_CODEPAGE = 'CP437'; // codificación de la CX-POS
 
 const POS_ESC = '\x1B';
 const POS_GS  = '\x1D';
@@ -1745,7 +1745,6 @@ const POS_ALTO_ON     = POS_GS  + '!' + '\x01'; // doble alto (para el nombre de
 const POS_ALTO_OFF    = POS_GS  + '!' + '\x00';
 const POS_CORTE       = '\n\n\n' + POS_GS + 'V' + '\x01'; // alimenta papel y corta (AutoCut activado en la impresora)
 
-let qzSeguridadConfigurada = false;
 let qzConectando = null;
 
 // CP437 sí trae tildes y la ñ española, pero no emojis ni comillas "curvas"
@@ -1792,6 +1791,7 @@ function construirTicketVentaPOS(venta) {
   t += posLimpiarTexto('MULTIREPUESTOS SOLOAGRO') + '\n';
   t += POS_ALTO_OFF + POS_NEGRITA_OFF;
   t += posLimpiarTexto('COMPROBANTE DE VENTA') + '\n';
+  t += '\n';
   t += POS_ALINEAR_IZQ;
   t += posLinea();
   t += `Fecha: ${posLimpiarTexto(venta.fecha)}    Hora: ${posLimpiarTexto(venta.hora)}\n`;
@@ -1818,18 +1818,21 @@ function construirTicketVentaPOS(venta) {
   });
 
   t += posLinea();
-  t += POS_NEGRITA_ON;
+  t += POS_ALTO_ON + POS_NEGRITA_ON;
   const etiquetaTotal = venta.saldoPendiente !== undefined ? 'PAGADO AHORA' : 'TOTAL';
   t += `${etiquetaTotal}:`.padEnd(POS_ANCHO - 12) + fmt(venta.total).padStart(12) + '\n';
-  t += POS_NEGRITA_OFF;
+  t += POS_ALTO_OFF + POS_NEGRITA_OFF;
   if (venta.saldoPendiente !== undefined) {
     t += 'FALTA POR CANCELAR:'.padEnd(POS_ANCHO - 12) + fmt(venta.saldoPendiente).padStart(12) + '\n';
   }
   t += `Metodo de pago: ${metodoTexto}\n`;
   t += posLinea();
   t += POS_ALINEAR_CEN;
+  t += POS_ALTO_ON + POS_NEGRITA_ON;
   t += posLimpiarTexto('GRACIAS POR SU COMPRA') + '\n';
+  t += POS_ALTO_OFF + POS_NEGRITA_OFF;
   t += POS_ALINEAR_IZQ;
+  t += '\n\n\n\n\n\n';
   t += POS_CORTE;
 
   return t;
@@ -1841,14 +1844,11 @@ async function posConectarQZ() {
   if (typeof qz === 'undefined') {
     throw new Error('La librería de QZ Tray no cargó en la página.');
   }
-  if (!qzSeguridadConfigurada) {
-    // Modo sin certificado: QZ Tray muestra un aviso pidiendo permitir la
-    // conexión la primera vez (ahí mismo se puede marcar "recordar").
-    qz.security.setCertificatePromise(function (resolve) { resolve(); });
-    qz.security.setSignaturePromise(function () {
-      return function (resolve) { resolve(); };
-    });
-    qzSeguridadConfigurada = true;
+  if (!window.soloAgroQZSeguridadLista) {
+    throw new Error(
+      'La firma de QZ Tray no está configurada. ' +
+      'Verifica que digital-certificate.txt y private-key.pem estén en la carpeta de SoloAgro.'
+    );
   }
   if (qz.websocket.isActive()) return;
   if (!qzConectando) {
@@ -1858,12 +1858,25 @@ async function posConectarQZ() {
 }
 
 // Envía un ticket (texto con comandos ESC/POS ya incluidos) a POS_IMPRESORA
-// a través de QZ Tray. Quien llama a esta función debe capturar el error y
-// decidir si usa el respaldo de impresión por HTML.
+// a través de QZ Tray. La comunicación va firmada para permitir impresión
+// silenciosa sin el aviso Allow/Block en cada operación.
 async function posImprimir(texto) {
   await posConectarQZ();
-  const config = qz.configs.create(POS_IMPRESORA, { encoding: POS_CODEPAGE });
-  await qz.print(config, [texto]);
+
+  // USB: impresora instalada en Windows + ESC/POS RAW.
+  // No usa window.print(), HTML ni tamaño carta.
+  const impresoras = await qz.printers.find();
+  const encontrada = impresoras.find(p => String(p).trim() === POS_IMPRESORA);
+  if (!encontrada) {
+    throw new Error(
+      'No se encontró la impresora "' + POS_IMPRESORA + '" en QZ Tray. ' +
+      'Impresoras detectadas: ' + (impresoras.length ? impresoras.join(', ') : '(ninguna)')
+    );
+  }
+
+  const config = qz.configs.create(encontrada, { encoding: POS_CODEPAGE });
+  const data = [{ type: 'raw', format: 'command', flavor: 'plain', data: texto }];
+  return qz.print(config, data);
 }
 
 // =============================================
@@ -1965,10 +1978,8 @@ function imprimirBoucherHTML(venta) {
   window.print();
 }
 
-// NUEVO — imprimirBoucher(venta) ahora intenta primero la impresión térmica
-// POS (QZ Tray + ESC/POS, ticket de 72mm con corte automático). Si QZ Tray
-// no está instalado, no está corriendo, o la impresora POS_IMPRESORA no
-// aparece, cae automáticamente al respaldo de siempre (imprimirBoucherHTML,
+// imprimirBoucher(venta) usa la impresión térmica POS
+// (QZ Tray + ESC/POS, ticket de 72mm con corte automático).
 // ventana de impresión de Chrome) para que nunca se quede sin poder
 // imprimir. Se mantiene el mismo nombre de función para no tener que tocar
 // ningún otro lugar del código que ya llama a imprimirBoucher(venta).
@@ -1976,11 +1987,17 @@ async function imprimirBoucher(venta) {
   try {
     const ticket = construirTicketVentaPOS(venta);
     await posImprimir(ticket);
-    mostrarToast('Ticket enviado a la impresora ✓');
+    mostrarToast('Ticket enviado a la CX-POS ✓');
   } catch (err) {
-    console.warn('Impresión térmica POS no disponible, usando respaldo HTML:', err);
-    mostrarToast('Impresora térmica no disponible (' + (err && err.message ? err.message : 'sin conexión con QZ Tray') + '). Se usó la impresión del navegador.');
-    imprimirBoucherHTML(venta);
+    console.error('Error de impresión POS USB:', err);
+    const motivo = err && err.message ? err.message : String(err);
+    mostrarToast('No se pudo imprimir el ticket');
+    alert(
+      'NO SE PUDO IMPRIMIR EL TICKET POS.\n\n' +
+      motivo + '\n\n' +
+      'Verifica que QZ Tray esté ejecutándose y que la impresora "' + POS_IMPRESORA +
+      '" esté encendida y conectada por USB.'
+    );
   }
 }
 
@@ -2845,5 +2862,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Config
   document.getElementById('btn-agregar-usuario').addEventListener('click', agregarUsuario);
   document.getElementById('btn-guardar-config').addEventListener('click', guardarConfig);
-  document.getElementById('btn-probar-impresora').addEventListener('click', probarImpresoraPOS);
+  const btnProbarImpresora = document.getElementById('btn-probar-impresora');
+  if (btnProbarImpresora) btnProbarImpresora.addEventListener('click', probarImpresoraPOS);
 });

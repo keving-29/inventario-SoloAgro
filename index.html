@@ -313,6 +313,11 @@
           <input type="number" id="conf-stock-min" placeholder="5" min="0">
           <button class="btn-primary" id="btn-guardar-config">Guardar</button>
         </div>
+        <div class="card">
+          <h2>Impresora POS</h2>
+          <p style="font-size:13px;color:var(--texto2);margin-bottom:12px">CX-POS Soloagro · USB · QZ Tray</p>
+          <button class="btn-primary" id="btn-probar-impresora">Probar impresora</button>
+        </div>
       </section>
 
         </main>
@@ -654,13 +659,10 @@
 
   <div id="toast" class="">Datos sincronizados ✓</div>
 
-  <!-- NUEVO — Impresión térmica POS (CX-POS CX-20) vía QZ Tray.
-       Requiere tener QZ Tray instalado y corriendo en el computador con
-       Windows (ver instrucciones aparte). Si la librería no carga o QZ Tray
-       no está corriendo, app.js cae automáticamente a la impresión con
-       window.print() de toda la vida, así que esto no rompe nada si no se
-       instala QZ Tray. -->
-  <script src="https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js"></script>
+  <!-- Impresión térmica POS (CX-POS CX-20) vía QZ Tray.
+       qz-security.js firma las solicitudes con las claves locales de QZ Tray. -->
+  <script src="qz-tray.js"></script>
+  <script src="qz-security.js"></script>
   <script src="app.js"></script>
 
 </body></html>
