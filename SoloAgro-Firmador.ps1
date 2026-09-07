@@ -1,7 +1,7 @@
 # SoloAgro - firmador local para QZ Tray
 # Compatible con Windows PowerShell 5.1 (incluido en Windows).
 $ErrorActionPreference = 'Stop'
-$Port = 8181
+$Port = 9191
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $KeyPath = Join-Path $Root 'private-key.pem'
 

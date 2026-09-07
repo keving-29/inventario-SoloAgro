@@ -1,0 +1,22 @@
+SOLOAGRO - SOLUCION FINAL IMPRESION POS
+
+CAUSA DEL ERROR:
+QZ Tray usa el puerto 8181. El firmador local tambien estaba intentando usar 8181,
+por eso chocaban entre si.
+
+SOLUCION:
+- QZ Tray queda en sus puertos normales.
+- El firmador local de SoloAgro ahora usa http://127.0.0.1:9191/sign.
+- Se mantiene SHA512, compatible con la clave y el certificado actuales.
+- El codigo de traslado NO fue modificado.
+
+USO:
+1. Conserva private-key.pem en esta carpeta. NO lo subas a GitHub.
+2. Ejecuta Iniciar-SoloAgro.bat.
+3. Deja abierta la ventana "SOLOAGRO - FIRMADOR QZ TRAY".
+4. Se abrira GitHub Pages.
+5. QZ Tray debe estar ejecutandose y la impresora debe llamarse exactamente:
+   CX-POS Soloagro
+
+PARA GITHUB:
+Sube a GitHub solamente los archivos publicos. private-key.pem queda local.
