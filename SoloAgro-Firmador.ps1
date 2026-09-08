@@ -43,14 +43,48 @@ public static class SoloAgroRsa {
         byte[] v = ReadTlv(b, ref p, 0x02);
         int i=0; while(i<v.Length-1 && v[i]==0) i++;
         byte[] r = new byte[v.Length-i]; Buffer.BlockCopy(v,i,r,0,r.Length);
-        Array.Reverse(r); return r;
+        // FIX: RSAParameters de .NET espera Modulus/Exponent/D/P/Q/DP/DQ/InverseQ
+        // en formato big-endian, que es el mismo orden en que ya vienen en el
+        // DER. El Array.Reverse original los dejaba en little-endian, lo cual
+        // es incorrecto y corrompe la llave importada.
+        return r;
     }
+    // Ajusta v al largo exacto 'len' en bytes: recorta ceros de mas al
+    // inicio, o rellena con ceros al inicio si le falta. Windows exige que
+    // cada componente RSA tenga exactamente el largo esperado.
+    static byte[] FixLen(byte[] v, int len) {
+        if (v.Length == len) return v;
+        if (v.Length > len) {
+            int extra = v.Length - len;
+            byte[] r = new byte[len]; Buffer.BlockCopy(v, extra, r, 0, len); return r;
+        }
+        byte[] r2 = new byte[len]; Buffer.BlockCopy(v, 0, r2, len - v.Length, v.Length); return r2;
+    }
+
     static RSAParameters ParseRsaPrivateKey(byte[] der) {
         int p=0; byte[] seq=ReadTlv(der,ref p,0x30); p=0;
         Skip(seq,ref p,0x02);
+        byte[] modulus = IntVal(seq,ref p);
+        byte[] exponent = IntVal(seq,ref p);
+        byte[] d = IntVal(seq,ref p);
+        byte[] pp = IntVal(seq,ref p);
+        byte[] qq = IntVal(seq,ref p);
+        byte[] dp = IntVal(seq,ref p);
+        byte[] dq = IntVal(seq,ref p);
+        byte[] iq = IntVal(seq,ref p);
+
+        int modLen = modulus.Length;
+        int halfLen = (modLen + 1) / 2;
+
         RSAParameters rp = new RSAParameters();
-        rp.Modulus=IntVal(seq,ref p); rp.Exponent=IntVal(seq,ref p); rp.D=IntVal(seq,ref p);
-        rp.P=IntVal(seq,ref p); rp.Q=IntVal(seq,ref p); rp.DP=IntVal(seq,ref p); rp.DQ=IntVal(seq,ref p); rp.InverseQ=IntVal(seq,ref p);
+        rp.Modulus = modulus;
+        rp.Exponent = exponent;
+        rp.D = FixLen(d, modLen);
+        rp.P = FixLen(pp, halfLen);
+        rp.Q = FixLen(qq, halfLen);
+        rp.DP = FixLen(dp, halfLen);
+        rp.DQ = FixLen(dq, halfLen);
+        rp.InverseQ = FixLen(iq, halfLen);
         return rp;
     }
     public static RSACryptoServiceProvider Load(string pem) {

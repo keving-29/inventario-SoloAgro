@@ -1728,6 +1728,16 @@ function renderDashboard() {
 
 const POS_IMPRESORA = 'CX-POS Soloagro';
 const POS_ANCHO = 42;
+
+// =====================================================
+// 🧾 CONFIGURACIÓN DEL TICKET POS — MODIFICAR SOLO AQUÍ
+// =====================================================
+// Ancho real de la CX-POS: 42 caracteres por línea.
+const TICKET_CODIGO = 7;
+const TICKET_PRODUCTO = 23;
+const TICKET_CANTIDAD = 3;
+// El precio ocupa automáticamente el espacio restante.
+
 const POS_CODEPAGE = 'IBM437';
 
 const POS_ESC = '\x1B';
@@ -1762,13 +1772,56 @@ function posTruncar(texto, ancho) {
 }
 
 function posColumnas(codigo, producto, cant, precio) {
-  const cCod = 12, cProd = 15, cCant = 5;
+  // Columnas configurables. El producto puede ocupar 2 o más líneas
+  // para NO cortar el nombre.
+  const cCod = TICKET_CODIGO;
+  const cProd = TICKET_PRODUCTO;
+  const cCant = TICKET_CANTIDAD;
   const cPrecio = POS_ANCHO - cCod - cProd - cCant;
-  const col1 = posTruncar(codigo, cCod - 1).padEnd(cCod);
-  const col2 = posTruncar(producto, cProd - 1).padEnd(cProd);
+
+  const cod = posLimpiarTexto(codigo);
+  const prod = posLimpiarTexto(producto);
+
+  // Divide el nombre por palabras, respetando el ancho disponible.
+  const palabras = prod.split(/\s+/).filter(Boolean);
+  const lineasProducto = [];
+  let linea = '';
+
+  palabras.forEach(palabra => {
+    if (!linea) {
+      linea = palabra;
+    } else if ((linea + ' ' + palabra).length <= cProd) {
+      linea += ' ' + palabra;
+    } else {
+      lineasProducto.push(linea);
+      linea = palabra;
+    }
+  });
+  if (linea || lineasProducto.length === 0) lineasProducto.push(linea);
+
+  // Si una sola palabra supera el ancho, la parte en bloques para no perderla.
+  const ajustadas = [];
+  lineasProducto.forEach(l => {
+    while (l.length > cProd) {
+      ajustadas.push(l.slice(0, cProd));
+      l = l.slice(cProd);
+    }
+    ajustadas.push(l);
+  });
+
+  const col1 = posTruncar(cod, cCod - 1).padEnd(cCod);
   const col3 = String(cant).padStart(cCant);
   const col4 = String(precio).padStart(cPrecio);
-  return col1 + col2 + col3 + col4;
+
+  // Primera línea lleva código, producto, cantidad y precio.
+  let resultado = col1 + posTruncar(ajustadas[0], cProd).padEnd(cProd) + col3 + col4;
+
+  // Las siguientes líneas quedan debajo del nombre del producto.
+  for (let n = 1; n < ajustadas.length; n++) {
+    resultado += '\n' + ' '.repeat(cCod) + posTruncar(ajustadas[n], cProd).padEnd(cProd);
+  }
+
+  return resultado;
 }
 
 function posLinea() {
@@ -1787,6 +1840,8 @@ function construirTicketVentaPOS(venta) {
   t += POS_ALTO_OFF + POS_NEGRITA_OFF;
   t += posLimpiarTexto('COMPROBANTE DE VENTA') + '\n';
   t += POS_ALINEAR_IZQ;
+  // Texto del cuerpo más grande (doble alto, mismo ancho de 42 columnas).
+  t += POS_ALTO_ON;
   t += posLinea();
   t += `Fecha: ${posLimpiarTexto(venta.fecha)}    Hora: ${posLimpiarTexto(venta.hora)}\n`;
 
