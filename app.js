@@ -1719,20 +1719,16 @@ function renderDashboard() {
 }
 
 // =============================================
-// NUEVO — IMPRESIÓN TÉRMICA POS (QZ Tray + ESC/POS)
+// IMPRESIÓN TÉRMICA POS (QZ Tray + ESC/POS)
 // =============================================
-// Todo este bloque es nuevo. Conecta con QZ Tray (una aplicación que corre
-// en el Windows del local) para mandar el ticket directo a la impresora
-// térmica CX-POS CX-20 usando comandos ESC/POS crudos, en vez de mandar
-// HTML al diálogo de impresión de Chrome (que es lo que no formateaba bien
-// el ticket con el driver "Generic / Text Only"). Si QZ Tray no está
-// instalado o no está corriendo, no rompe nada: quien llama a posImprimir()
-// recibe un error y decide usar el respaldo de impresión por HTML de
-// siempre — ver imprimirBoucher() más abajo.
+// La venta se imprime directamente en la CX-POS por QZ Tray.
+// La firma de QZ se configura EXTERNAMENTE en qz-security.js usando
+// Google Apps Script. La clave privada NUNCA debe estar en este archivo
+// ni en GitHub.
 
-const POS_IMPRESORA = 'CX-POS Soloagro'; // debe coincidir EXACTO con el nombre de la impresora en Windows
-const POS_ANCHO = 42;      // caracteres por línea en papel de 72mm (súbelo a 48 si tu impresora imprime más angosto el texto)
-const POS_CODEPAGE = 'CP437'; // codificación de la CX-POS
+const POS_IMPRESORA = 'CX-POS Soloagro';
+const POS_ANCHO = 42;
+const POS_CODEPAGE = 'IBM437';
 
 const POS_ESC = '\x1B';
 const POS_GS  = '\x1D';
@@ -1741,47 +1737,146 @@ const POS_ALINEAR_IZQ = POS_ESC + 'a' + '\x00';
 const POS_ALINEAR_CEN = POS_ESC + 'a' + '\x01';
 const POS_NEGRITA_ON  = POS_ESC + 'E' + '\x01';
 const POS_NEGRITA_OFF = POS_ESC + 'E' + '\x00';
-const POS_ALTO_ON     = POS_GS  + '!' + '\x01'; // doble alto (para el nombre del negocio)
+const POS_ALTO_ON     = POS_GS  + '!' + '\x01';
 const POS_ALTO_OFF    = POS_GS  + '!' + '\x00';
-const POS_CORTE       = '\n\n\n' + POS_GS + 'V' + '\x01'; // alimenta papel y corta (AutoCut activado en la impresora)
+const POS_CORTE       = '\n\n\n' + POS_GS + 'V' + '\x01';
 
-let qzSeguridadConfigurada = false;
 let qzConectando = null;
 
-// La firma se configura en qz-security.js. Ese archivo usa un firmador local
-// para mantener private-key.pem fuera de GitHub.
+// Limpia caracteres que la impresora CP437 no puede representar bien.
+function posLimpiarTexto(texto) {
+  return String(texto == null ? '' : texto)
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, '-')
+    .replace(/[^\x00-\x7FÁÉÍÓÚáéíóúÑñ¿¡]/g, '');
+}
+
+function posRepetir(caracter, veces) {
+  return new Array(Math.max(0, veces) + 1).join(caracter);
+}
+
+function posTruncar(texto, ancho) {
+  texto = posLimpiarTexto(texto);
+  return texto.length > ancho ? texto.slice(0, Math.max(0, ancho - 1)) + '.' : texto;
+}
+
+function posColumnas(codigo, producto, cant, precio) {
+  const cCod = 12, cProd = 15, cCant = 5;
+  const cPrecio = POS_ANCHO - cCod - cProd - cCant;
+  const col1 = posTruncar(codigo, cCod - 1).padEnd(cCod);
+  const col2 = posTruncar(producto, cProd - 1).padEnd(cProd);
+  const col3 = String(cant).padStart(cCant);
+  const col4 = String(precio).padStart(cPrecio);
+  return col1 + col2 + col3 + col4;
+}
+
+function posLinea() {
+  return posRepetir('-', POS_ANCHO) + '\n';
+}
+
+// Construye el ticket físico de una venta.
+function construirTicketVentaPOS(venta) {
+  const metodoTexto = venta.metodoPago === 'transferencia' ? 'Transferencia' : 'Efectivo';
+  let t = '';
+
+  t += POS_INIT;
+  t += POS_ALINEAR_CEN;
+  t += POS_ALTO_ON + POS_NEGRITA_ON;
+  t += posLimpiarTexto('MULTIREPUESTOS SOLOAGRO') + '\n';
+  t += POS_ALTO_OFF + POS_NEGRITA_OFF;
+  t += posLimpiarTexto('COMPROBANTE DE VENTA') + '\n';
+  t += POS_ALINEAR_IZQ;
+  t += posLinea();
+  t += `Fecha: ${posLimpiarTexto(venta.fecha)}    Hora: ${posLimpiarTexto(venta.hora)}\n`;
+
+  if (venta.clienteNombre) {
+    t += posLinea();
+    t += `Cliente: ${posLimpiarTexto(venta.clienteNombre)}\n`;
+    if (venta.clienteCedula) t += `Cedula: ${posLimpiarTexto(venta.clienteCedula)}\n`;
+    if (venta.clienteTelefono) t += `Telefono: ${posLimpiarTexto(venta.clienteTelefono)}\n`;
+    if (venta.clienteDireccion) t += `Direccion: ${posLimpiarTexto(venta.clienteDireccion)}\n`;
+  }
+
+  if (venta.nota) {
+    t += posLinea();
+    t += `Nota: ${posLimpiarTexto(venta.nota)}\n`;
+  }
+
+  t += posLinea();
+  t += POS_NEGRITA_ON + posColumnas('Codigo', 'Producto', 'Cant', 'Precio') + '\n' + POS_NEGRITA_OFF;
+  t += posLinea();
+
+  (venta.items || []).forEach(i => {
+    t += posColumnas(i.ref || '-', i.nombre || '', i.cantidad || 0, fmt(i.precio || 0)) + '\n';
+  });
+
+  t += posLinea();
+  t += POS_NEGRITA_ON;
+  const etiquetaTotal = venta.saldoPendiente !== undefined ? 'PAGADO AHORA' : 'TOTAL';
+  t += `${etiquetaTotal}:`.padEnd(POS_ANCHO - 12) + fmt(venta.total).padStart(12) + '\n';
+  t += POS_NEGRITA_OFF;
+
+  if (venta.saldoPendiente !== undefined) {
+    t += 'FALTA POR CANCELAR:'.padEnd(POS_ANCHO - 12) + fmt(venta.saldoPendiente).padStart(12) + '\n';
+  }
+
+  t += `Metodo de pago: ${metodoTexto}\n`;
+  t += posLinea();
+  t += POS_ALINEAR_CEN;
+  t += posLimpiarTexto('GRACIAS POR SU COMPRA') + '\n';
+  t += POS_ALINEAR_IZQ;
+  t += POS_CORTE;
+
+  return t;
+}
+
+// Conecta con QZ Tray. qz-security.js debe haberse cargado antes que app.js.
 async function posConectarQZ() {
   if (typeof qz === 'undefined') {
     throw new Error('La librería de QZ Tray no cargó en la página.');
   }
+
   if (!window.soloAgroQZSeguridadLista) {
     throw new Error(
-      'La firma de QZ Tray no está disponible. Ejecuta Iniciar-SoloAgro.bat y verifica que el firmador local esté activo.'
+      'La firma de QZ Tray no está configurada. Verifica qz-security.js y Google Apps Script.'
     );
   }
+
   if (qz.websocket.isActive()) return;
+
   if (!qzConectando) {
-    qzConectando = qz.websocket.connect().finally(() => { qzConectando = null; });
+    qzConectando = qz.websocket.connect().finally(() => {
+      qzConectando = null;
+    });
   }
+
   await qzConectando;
 }
 
+// Envía ESC/POS RAW directamente a la impresora Windows.
 async function posImprimir(texto) {
   await posConectarQZ();
 
-  // USB: impresora instalada en Windows + ESC/POS RAW.
-  // No usa window.print(), HTML ni tamaño carta.
   const impresoras = await qz.printers.find();
   const encontrada = impresoras.find(p => String(p).trim() === POS_IMPRESORA);
+
   if (!encontrada) {
     throw new Error(
       'No se encontró la impresora "' + POS_IMPRESORA + '" en QZ Tray. ' +
-      'Impresoras detectadas: ' + (impresoras.length ? impresoras.join(', ') : '(ninguna)')
+      'Impresoras detectadas: ' +
+      (impresoras.length ? impresoras.join(', ') : '(ninguna)')
     );
   }
 
   const config = qz.configs.create(encontrada, { encoding: POS_CODEPAGE });
-  const data = [{ type: 'raw', format: 'command', flavor: 'plain', data: texto }];
+  const data = [{
+    type: 'raw',
+    format: 'command',
+    flavor: 'plain',
+    data: texto
+  }];
+
   return qz.print(config, data);
 }
 

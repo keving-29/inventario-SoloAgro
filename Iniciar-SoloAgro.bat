@@ -8,5 +8,5 @@ start "SoloAgro - Firmador QZ" powershell.exe -NoLogo -NoProfile -ExecutionPolic
 timeout /t 2 /nobreak >nul
 
 REM CAMBIA ESTA LINEA SOLO SI TU URL DE GITHUB PAGES ES DIFERENTE.
-start "" "https://keving-29.github.io/"
+start "" "https://keving-29.github.io/inventario-SoloAgro/"
 endlocal
