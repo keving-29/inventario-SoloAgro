@@ -1,11 +1,3 @@
-<html lang="es"><head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Multirepuestos SoloAgro</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&amp;family=Inter:wght@300;400;500&amp;display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
-  <link rel="stylesheet" href="style.css">
-</head>
 <body>
 
   <div id="login-screen" class="hidden">
@@ -37,6 +29,7 @@
           <button class="nav-tab active" data-tab="dashboard"><i class="ti ti-chart-bar"></i> Resumen</button>
           <button class="nav-tab" data-tab="inventario"><i class="ti ti-package"></i> Inventario</button>
           <button class="nav-tab" data-tab="ventas"><i class="ti ti-shopping-bag"></i> Vender</button>
+          <button class="nav-tab" data-tab="cotizacion"><i class="ti ti-file-invoice"></i> Cotización</button>
           <button class="nav-tab" data-tab="traslado"><i class="ti ti-truck"></i> Traslado</button>
           <button class="nav-tab" data-tab="deudores"><i class="ti ti-users"></i> Deudores</button>
           <button class="nav-tab" data-tab="anticipos"><i class="ti ti-cash-banknote"></i> Anticipos</button>
@@ -62,13 +55,13 @@
 
       <!-- DASHBOARD -->
       <section id="panel-dashboard" class="panel active">
-        <p id="dash-fecha">Hoy · viernes, 4 de septiembre de 2026</p>
+        <p id="dash-fecha">Hoy · martes, 8 de septiembre de 2026</p>
         <div id="dash-metrics">
-    <div class="metric rosa"><div class="mlabel">Total vendido hoy</div><div class="mvalue">$84.000</div></div>
-    <div class="metric"><div class="mlabel">Transacciones</div><div class="mvalue">2</div></div>
-    <div class="metric"><div class="mlabel">Productos</div><div class="mvalue">1072</div></div>
-    <div class="metric alerta"><div class="mlabel">Stock bajo</div><div class="mvalue">764</div></div>
-    <div class="metric danger"><div class="mlabel">Sin stock</div><div class="mvalue">14</div></div>
+    <div class="metric rosa"><div class="mlabel">Total vendido hoy</div><div class="mvalue">$253.000</div></div>
+    <div class="metric"><div class="mlabel">Transacciones</div><div class="mvalue">3</div></div>
+    <div class="metric"><div class="mlabel">Productos</div><div class="mvalue">1082</div></div>
+    <div class="metric alerta"><div class="mlabel">Stock bajo</div><div class="mvalue">771</div></div>
+    <div class="metric danger"><div class="mlabel">Sin stock</div><div class="mvalue">17</div></div>
     <div class="metric danger"><div class="mlabel">Deudas vencidas</div><div class="mvalue">1</div></div>
     
     
@@ -82,22 +75,31 @@
           <div id="dash-ventas-hoy"><div class="tabla-wrap"><table>
     <thead><tr><th>Hora</th><th>Productos</th><th>Nota</th><th>Pago</th><th>Total</th><th>Ganancia</th><th></th></tr></thead>
     <tbody>
-    <tr class="fila-venta-clickeable" data-id="4eszvmck3mimtmzq942">
-      <td>08:29 a. m.</td>
-      <td style="font-size:13px"></td>
-      <td style="font-size:13px;color:var(--texto2)">-</td>
+    <tr class="fila-venta-clickeable" data-id="9epleur73kemtsnett6">
+      <td>08:31 a. m.</td>
+      <td style="font-size:13px">EMPAQUETADURA MOTOR MOTOSIERRA 5200 x1, CIGUEÑAL MOTOSIERRA CHINA 5200 x1</td>
+      <td style="font-size:13px;color:var(--texto2)">Abono deuda de: EMPAQUETADURA MOTOR MOTOSIERRA 5200, CIGUEÑAL MOTOSIERRA CHINA 5200</td>
       <td><span class="badge verde">💵 Efectivo</span></td>
-      <td style="font-weight:500">$42.000</td>
-      <td style="color:var(--rosa-oscuro);font-weight:500">$15.000</td>
+      <td style="font-weight:500">$50.000</td>
+      <td style="color:var(--rosa-oscuro);font-weight:500">$29.570</td>
       <td><i class="ti ti-receipt" style="color:var(--rosa-medio);font-size:16px"></i></td>
     </tr>
-    <tr class="fila-venta-clickeable" data-id="omu21gqeq0bmtmzq34u">
-      <td>08:29 a. m.</td>
-      <td style="font-size:13px">BALINERA KOYO ORIGINAL 6202 x1, BALINERA KOYO ORIGINAL 6001 x2, BALINERA KOYO ORIGINAL 6000 x1, RETENEDOR CABEZOTE SHINDAIWA B-45 x1</td>
+    <tr class="fila-venta-clickeable" data-id="lkyjltvuf0amtsn3thj">
+      <td>08:22 a. m.</td>
+      <td style="font-size:13px">CUCHILLA BELLOTA ROJA x2, BUJE TUBO CAÑA GUADAÑAS 28MM x5</td>
       <td style="font-size:13px;color:var(--texto2)">-</td>
       <td><span class="badge verde">💵 Efectivo</span></td>
-      <td style="font-weight:500">$42.000</td>
-      <td style="color:var(--rosa-oscuro);font-weight:500">$15.000</td>
+      <td style="font-weight:500">$40.000</td>
+      <td style="color:var(--rosa-oscuro);font-weight:500">$14.000</td>
+      <td><i class="ti ti-receipt" style="color:var(--rosa-medio);font-size:16px"></i></td>
+    </tr>
+    <tr class="fila-venta-clickeable" data-id="fb7ya046i7smtsmqjte">
+      <td>08:12 a. m.</td>
+      <td style="font-size:13px">JUEGO ANILLOS ORIGINAL MOTOSIERRA MS-382/650 x1, CAMPANA MS-382/361 x1, TENSOR MOTOSIERRA HUSVARNA 61/288 x1, ACELERADOR SHINDAIWA B-45 x1</td>
+      <td style="font-size:13px;color:var(--texto2)">-</td>
+      <td><span class="badge verde">💵 Efectivo</span></td>
+      <td style="font-weight:500">$163.000</td>
+      <td style="color:var(--rosa-oscuro);font-weight:500">$57.000</td>
       <td><i class="ti ti-receipt" style="color:var(--rosa-medio);font-size:16px"></i></td>
     </tr></tbody></table></div></div>
         </div>
@@ -171,6 +173,29 @@
               <button class="btn-primary" id="btn-confirmar-venta">Confirmar venta</button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <!-- COTIZACIÓN (no afecta inventario ni se registra como venta) -->
+      <section id="panel-cotizacion" class="panel">
+        <div class="card">
+          <div class="section-header">
+            <h2>Cotización</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn-secundario" id="btn-imprimir-cotizacion"><i class="ti ti-printer"></i> Imprimir cotización</button>
+              <button class="btn-peligro" id="btn-limpiar-cotizacion">Limpiar</button>
+            </div>
+          </div>
+          <p style="font-size:12px;color:var(--texto2);margin-bottom:1rem">Arma una cotización para el cliente. No descuenta stock ni se registra como venta.</p>
+
+          <input type="text" id="cot-cliente" placeholder="Nombre del cliente (opcional)" style="margin-bottom:1rem">
+
+          <div id="cotizacion-busqueda-box">
+            <input type="text" id="cotizacion-search" placeholder="Buscar producto y presiona Enter...">
+            <div id="cotizacion-resultados"></div>
+          </div>
+
+          <div id="cotizacion-contenido"></div>
         </div>
       </section>
 
@@ -335,6 +360,7 @@
       <input type="text" id="prod-ref" placeholder="Referencia / Código *">
       <input type="text" id="prod-nombre" placeholder="Nombre del producto *">
       <input type="number" id="prod-pcompra" placeholder="Precio de compra *">
+      <div id="prod-pcompra-iva" style="font-size:12px;color:var(--rosa-oscuro);margin:-8px 0 4px 2px"></div>
       <input type="number" id="prod-pventa1" placeholder="Precio de venta 1 (normal) *">
       <input type="number" id="prod-pventa2" placeholder="Precio de venta 2 (especial)">
       <input type="number" id="prod-stock" placeholder="Stock disponible *">
@@ -637,9 +663,29 @@
     </div>
   </div>
 
+  <!-- MODAL: cantidad y precio unitario al agregar producto a la cotización -->
+  <div id="modal-cantidad-cotizacion" class="modal-bg hidden">
+    <div class="modal" style="max-width:360px">
+      <div class="modal-header">
+        <h3 id="cq-nombre" style="font-size:16px"></h3>
+        <button class="btn-cerrar-modal" data-modal="modal-cantidad-cotizacion">✕</button>
+      </div>
+      <p style="font-size:13px;color:var(--texto2);margin-bottom:6px">Cantidad</p>
+      <input type="number" id="cq-cantidad" min="1" value="1">
+      <p style="font-size:13px;color:var(--texto2);margin:10px 0 6px">Precio unitario</p>
+      <input type="number" id="cq-precio" min="0">
+      <button class="btn-primary" id="btn-cq-agregar" style="width:100%;margin-top:10px">Agregar a la cotización</button>
+    </div>
+  </div>
+
   <!-- IMPRESIÓN: Traslado -->
   <div id="traslado-print">
     <div id="traslado-print-contenido"></div>
+  </div>
+
+  <!-- IMPRESIÓN: Cotización -->
+  <div id="cotizacion-print">
+    <div id="cotizacion-print-contenido"></div>
   </div>
 
   <!-- IMPRESIÓN: Boucher de venta -->
@@ -669,4 +715,4 @@
   <script src="qz-security.js"></script>
   <script src="app.js"></script>
 
-</body></html>
+</body>

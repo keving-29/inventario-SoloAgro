@@ -639,7 +639,7 @@ input:focus, select:focus { border-color: var(--rosa-medio); background: var(--c
 .gasto-cat-btn.selected i { color: #fff; }
 
 /* IMPRESIÓN DE TRASLADO Y BOUCHER */
-#traslado-print, #venta-print, #deudor-print, #proveedor-print { display: none; }
+#traslado-print, #venta-print, #deudor-print, #proveedor-print, #cotizacion-print { display: none; }
 
 #tp-firmas {
   display: flex;
@@ -656,7 +656,7 @@ input:focus, select:focus { border-color: var(--rosa-medio); background: var(--c
      se vea, y eso generaba una segunda hoja en blanco al imprimir. Ocultando
      con display:none el contenido realmente sale del flujo del documento. */
   #login-screen, #app, #toast { display: none !important; }
-  #traslado-print.activo, #venta-print.activo, #deudor-print.activo, #proveedor-print.activo {
+  #traslado-print.activo, #venta-print.activo, #deudor-print.activo, #proveedor-print.activo, #cotizacion-print.activo {
     display: block !important;
     width: 100%;
     padding: 20px;
@@ -665,7 +665,7 @@ input:focus, select:focus { border-color: var(--rosa-medio); background: var(--c
   #tp-header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 12px; }
   #tp-header h1 { font-family: var(--fuente-titulo); font-size: 24px; margin-bottom: 4px; }
   #tp-meta { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 16px; }
-  #traslado-print table, #venta-print table, #deudor-print table, #proveedor-print table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  #traslado-print th, #traslado-print td, #venta-print th, #venta-print td, #deudor-print th, #deudor-print td, #proveedor-print th, #proveedor-print td { border: 1px solid #999; padding: 6px 10px; text-align: left; }
-  #traslado-print th, #venta-print th, #deudor-print th, #proveedor-print th { background: #eee; }
+  #traslado-print table, #venta-print table, #deudor-print table, #proveedor-print table, #cotizacion-print table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #traslado-print th, #traslado-print td, #venta-print th, #venta-print td, #deudor-print th, #deudor-print td, #proveedor-print th, #proveedor-print td, #cotizacion-print th, #cotizacion-print td { border: 1px solid #999; padding: 6px 10px; text-align: left; }
+  #traslado-print th, #venta-print th, #deudor-print th, #proveedor-print th, #cotizacion-print th { background: #eee; }
 }
