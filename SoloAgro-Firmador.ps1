@@ -22,9 +22,14 @@ public static class SoloAgroRsa {
         int x = b[p++];
         if (x < 128) return new byte[] { (byte)x };
         int n = x & 127;
-        int v = 0;
-        for (int i=0;i<n;i++) v = (v << 8) | b[p++];
-        return new byte[] { (byte)v };
+        // FIX: antes esto calculaba v correctamente pero lo devolvia
+        // truncado a (byte)v, perdiendo todos los bytes menos el ultimo.
+        // Para una llave RSA de 2048 bits las longitudes ASN.1 siempre
+        // superan 255, asi que esto rompia SIEMPRE la lectura desde el
+        // primer bloque. Ahora se devuelven los n bytes reales.
+        byte[] result = new byte[n];
+        for (int i = 0; i < n; i++) { result[i] = b[p++]; }
+        return result;
     }
     static byte[] ReadTlv(byte[] b, ref int p, byte tag) {
         if (b[p++] != tag) throw new Exception("PEM DER invalido");
