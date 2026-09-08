@@ -85,6 +85,7 @@ async function sheetsLeer(ventasDias) {
     const r = await fetchConTimeout(url);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
+    if (!d || d.ok !== true) throw new Error((d && d.error) || 'Google Sheets rechazó la lectura.');
     setSyncStatus('conectado');
     return d.data || {};
   } catch (e) {
@@ -105,15 +106,26 @@ async function sheetsEscribir(accion, hoja, datos, filaOId) {
     const body = { action: accion, sheet: hoja, data: datos };
     if (typeof filaOId === 'number') body.row = filaOId;
     else if (filaOId) body.id = filaOId;
+
     const r = await fetchConTimeout(SCRIPT_URL, {
       method: 'POST',
       body: JSON.stringify(body)
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    // Apps Script puede responder HTTP 200 aunque la operación haya terminado
+    // con ok:false. Aquí comprobamos la respuesta real para no mostrar un
+    // "guardado" falso.
+    const respuesta = await r.json();
+    if (!respuesta || respuesta.ok !== true) {
+      throw new Error((respuesta && respuesta.error) || 'Google Sheets rechazó la operación.');
+    }
+
     setSyncStatus('conectado');
     return true;
   } catch (e) {
     setSyncStatus('error');
+    console.error(`Error escribiendo en ${hoja} (${accion}):`, e);
     return false;
   }
 }
@@ -157,24 +169,28 @@ async function sincronizar(ventasDias) {
     }));
   }
 
-  if (datos.Deudores && datos.Deudores.length > 1) {
-    DB.deudores = datos.Deudores.slice(1).map(f => ({
-      id: String(f[0]), clienteId: String(f[1]||''), nombre: String(f[2]||''),
-      cedula: String(f[3]||''), telefono: String(f[4]||''), direccion: String(f[5]||''),
-      productos: parsearJSON(f[6]), monto: Number(f[7])||0,
-      nota: String(f[8]||''), fecha: isoAFechaCO(f[9]), hora: String(f[10]||''), fechaLimite: isoAFechaCO(f[11]),
-      abonos: parsearJSON(f[12]), pagada: String(f[13])==='true'
-    }));
+  if (Array.isArray(datos.Deudores)) {
+    DB.deudores = datos.Deudores.length > 1
+      ? datos.Deudores.slice(1).map(f => ({
+          id: String(f[0]), clienteId: String(f[1]||''), nombre: String(f[2]||''),
+          cedula: String(f[3]||''), telefono: String(f[4]||''), direccion: String(f[5]||''),
+          productos: parsearJSON(f[6]), monto: Number(f[7])||0,
+          nota: String(f[8]||''), fecha: isoAFechaCO(f[9]), hora: String(f[10]||''), fechaLimite: isoAFechaCO(f[11]),
+          abonos: parsearJSON(f[12]), pagada: String(f[13])==='true'
+        }))
+      : [];
   }
 
-  if (datos.Anticipos && datos.Anticipos.length > 1) {
-    DB.anticipos = datos.Anticipos.slice(1).map(f => ({
-      id: String(f[0]), clienteId: String(f[1]||''), nombre: String(f[2]||''),
-      cedula: String(f[3]||''), telefono: String(f[4]||''), direccion: String(f[5]||''),
-      productos: parsearJSON(f[6]), monto: Number(f[7])||0,
-      nota: String(f[8]||''), fecha: isoAFechaCO(f[9]), hora: String(f[10]||''), fechaLimite: isoAFechaCO(f[11]),
-      abonos: parsearJSON(f[12]), pagada: String(f[13])==='true', descontado: String(f[14])==='true'
-    }));
+  if (Array.isArray(datos.Anticipos)) {
+    DB.anticipos = datos.Anticipos.length > 1
+      ? datos.Anticipos.slice(1).map(f => ({
+          id: String(f[0]), clienteId: String(f[1]||''), nombre: String(f[2]||''),
+          cedula: String(f[3]||''), telefono: String(f[4]||''), direccion: String(f[5]||''),
+          productos: parsearJSON(f[6]), monto: Number(f[7])||0,
+          nota: String(f[8]||''), fecha: isoAFechaCO(f[9]), hora: String(f[10]||''), fechaLimite: isoAFechaCO(f[11]),
+          abonos: parsearJSON(f[12]), pagada: String(f[13])==='true', descontado: String(f[14])==='true'
+        }))
+      : [];
   }
 
   if (datos.Proveedores && datos.Proveedores.length > 1) {
@@ -889,7 +905,12 @@ async function registrarPagoDeuda(entidad, tipo, monto, metodoPago) {
     saldoPendiente: calcularSaldo(entidad)
   };
   DB.ventas.push(venta);
-  await sheetsEscribir('append','Ventas',[venta.id,venta.fecha,venta.hora,venta.total,venta.ganancia,venta.nota,venta.metodoPago,JSON.stringify(venta.items),venta.clienteId,venta.clienteNombre,venta.clienteCedula,venta.clienteTelefono,venta.clienteDireccion,venta.pagadoAhora,venta.saldoPendiente]);
+  const ventaGuardada = await sheetsEscribir('append','Ventas',[venta.id,venta.fecha,venta.hora,venta.total,venta.ganancia,venta.nota,venta.metodoPago,JSON.stringify(venta.items),venta.clienteId,venta.clienteNombre,venta.clienteCedula,venta.clienteTelefono,venta.clienteDireccion,venta.pagadoAhora,venta.saldoPendiente]);
+  if (!ventaGuardada) {
+    DB.ventas = DB.ventas.filter(v => v.id !== venta.id);
+    entidad.abonos.pop();
+    throw new Error('No se pudo guardar el movimiento del abono en la hoja Ventas.');
+  }
 
   entidad.pagada = calcularSaldo(entidad) <= 0;
 
@@ -903,6 +924,8 @@ async function registrarPagoDeuda(entidad, tipo, monto, metodoPago) {
     }
     entidad.descontado = true;
   }
+
+  return venta;
 }
 
 function imprimirBoucherDeuda(d, tipo) {
@@ -982,22 +1005,57 @@ async function guardarAbono() {
   const lista = tipoAbonoActual==='deudor' ? DB.deudores : DB.anticipos;
   const d = lista.find(x => x.id===deudorAbonoActual);
   if (!d) return;
+
   const monto = parseFloat(document.getElementById('abono-monto').value)||0;
   const saldo = calcularSaldo(d);
   if (!monto || monto<=0) { alert('Ingresa un monto válido'); return; }
   if (monto > saldo) { alert(`El abono no puede ser mayor al saldo pendiente (${fmt(saldo)})`); return; }
-  const metodoPago = document.querySelector('input[name="abono-metodo"]:checked').value;
 
-  await registrarPagoDeuda(d, tipoAbonoActual, monto, metodoPago);
-  if (tipoAbonoActual==='deudor') await guardarDeudorEnSheet(d, false);
-  else await guardarAnticipoEnSheet(d, false);
+  const metodoSeleccionado = document.querySelector('input[name="abono-metodo"]:checked');
+  if (!metodoSeleccionado) { alert('Selecciona el método de pago'); return; }
+  const metodoPago = metodoSeleccionado.value;
 
-  guardarLocal();
-  cerrarModal('modal-abono');
-  if (tipoAbonoActual==='deudor') renderDeudores(); else renderAnticipos();
-  renderDashboard();
-  const completado = calcularSaldo(d)<=0;
-  mostrarToast(completado ? (tipoAbonoActual==='deudor'?'Deuda pagada completamente ✓':'Anticipo pagado completamente ✓') : `Pago registrado · ${fmt(monto)}. Usa el botón de imprimir si quieres el boucher.`);
+  const abonosAnteriores = Array.isArray(d.abonos) ? d.abonos.map(a => ({...a})) : [];
+  const pagadaAnterior = !!d.pagada;
+  let ventaAbono = null;
+  const btnAbono = document.getElementById('btn-guardar-abono');
+  if (btnAbono && btnAbono.disabled) return;
+  if (btnAbono) { btnAbono.disabled = true; btnAbono.textContent = 'Guardando...'; }
+
+  try {
+    ventaAbono = await registrarPagoDeuda(d, tipoAbonoActual, monto, metodoPago);
+
+    const guardadoEntidad = tipoAbonoActual==='deudor'
+      ? await guardarDeudorEnSheet(d, false)
+      : await guardarAnticipoEnSheet(d, false);
+
+    if (!guardadoEntidad) {
+      if (ventaAbono) await sheetsEscribir('delete','Ventas',null,ventaAbono.id);
+      d.abonos = abonosAnteriores;
+      d.pagada = pagadaAnterior;
+      if (ventaAbono) DB.ventas = DB.ventas.filter(v => v.id !== ventaAbono.id);
+      throw new Error('Google Sheets no confirmó la actualización del registro.');
+    }
+
+    guardarLocal();
+    cerrarModal('modal-abono');
+    if (tipoAbonoActual==='deudor') renderDeudores(); else renderAnticipos();
+    renderDashboard();
+
+    const completado = calcularSaldo(d)<=0;
+    mostrarToast(completado
+      ? (tipoAbonoActual==='deudor'?'Deuda pagada completamente ✓':'Anticipo pagado completamente ✓')
+      : `Abono guardado ✓ · ${fmt(monto)}`);
+  } catch (e) {
+    d.abonos = abonosAnteriores;
+    d.pagada = pagadaAnterior;
+    if (ventaAbono) DB.ventas = DB.ventas.filter(v => v.id !== ventaAbono.id);
+    guardarLocal();
+    console.error('Error guardando abono:', e);
+    alert('NO SE PUDO GUARDAR EL ABONO.\n\n' + (e && e.message ? e.message : String(e)));
+  } finally {
+    if (btnAbono) { btnAbono.disabled = false; btnAbono.textContent = 'Registrar abono'; }
+  }
 }
 
 // =============================================
@@ -1062,8 +1120,8 @@ function renderProductosDeudor() {
 
 async function guardarDeudorEnSheet(d, esNuevo) {
   const fila = [d.id,d.clienteId,d.nombre,d.cedula,d.telefono,d.direccion,JSON.stringify(d.productos||[]),d.monto,d.nota,d.fecha,d.hora,d.fechaLimite,JSON.stringify(d.abonos),d.pagada];
-  if (esNuevo) { await sheetsEscribir('append','Deudores',fila); }
-  else { await sheetsEscribir('update','Deudores',fila,d.id); }
+  if (esNuevo) return await sheetsEscribir('append','Deudores',fila);
+  return await sheetsEscribir('update','Deudores',fila,d.id);
 }
 
 function abrirModalDeudor(id) {
@@ -1114,7 +1172,13 @@ async function guardarDeudor() {
         clienteId: clienteDeudor.id, nombre: clienteDeudor.nombre, cedula: clienteDeudor.cedula,
         telefono: clienteDeudor.telefono||'', nota, productos, monto, fechaLimite
       });
-      await guardarDeudorEnSheet(d, false);
+      d.pagada = calcularSaldo(d) <= 0;
+      const actualizado = await guardarDeudorEnSheet(d, false);
+      if (!actualizado) {
+        btn.textContent='Guardar'; btn.disabled=false;
+        alert('NO SE PUDO ACTUALIZAR EL DEUDOR EN GOOGLE SHEETS.\n\nNo se cerró el formulario para que puedas volver a intentarlo.');
+        return;
+      }
     }
     btn.textContent='Guardar'; btn.disabled=false;
     guardarLocal(); cerrarModal('modal-deudor'); renderDeudores();
@@ -1144,9 +1208,34 @@ async function guardarDeudor() {
     abonos: [], pagada: false
   };
   DB.deudores.push(nuevo);
-  await guardarDeudorEnSheet(nuevo, true);
+  const deudorGuardado = await guardarDeudorEnSheet(nuevo, true);
+  if (!deudorGuardado) {
+    DB.deudores = DB.deudores.filter(x => x.id !== nuevo.id);
+    btn.textContent='Guardar'; btn.disabled=false;
+    alert('NO SE PUDO GUARDAR EL DEUDOR EN GOOGLE SHEETS.\n\nRevisa la conexión y vuelve a intentarlo.');
+    return;
+  }
 
-  if (anticipo > 0) await registrarPagoDeuda(nuevo, 'deudor', anticipo, metodoPago);
+  if (anticipo > 0) {
+    try {
+      const ventaInicial = await registrarPagoDeuda(nuevo, 'deudor', anticipo, metodoPago);
+      const deudorActualizado = await guardarDeudorEnSheet(nuevo, false);
+      if (!deudorActualizado) {
+        if (ventaInicial) await sheetsEscribir('delete','Ventas',null,ventaInicial.id);
+        DB.ventas = DB.ventas.filter(v => !ventaInicial || v.id !== ventaInicial.id);
+        DB.deudores = DB.deudores.filter(x => x.id !== nuevo.id);
+        alert('NO SE PUDO GUARDAR EL ABONO INICIAL DEL DEUDOR.\n\nEl registro fue revertido para evitar inconsistencias.');
+        btn.textContent='Guardar'; btn.disabled=false;
+        return;
+      }
+    } catch (e) {
+      DB.deudores = DB.deudores.filter(x => x.id !== nuevo.id);
+      console.error('Error guardando abono inicial:', e);
+      alert('NO SE PUDO GUARDAR EL ABONO INICIAL.\n\n' + (e && e.message ? e.message : String(e)));
+      btn.textContent='Guardar'; btn.disabled=false;
+      return;
+    }
+  }
 
   guardarLocal(); btn.textContent='Guardar'; btn.disabled=false;
   cerrarModal('modal-deudor'); renderDeudores(); renderDashboard();
@@ -1728,16 +1817,6 @@ function renderDashboard() {
 
 const POS_IMPRESORA = 'CX-POS Soloagro';
 const POS_ANCHO = 42;
-
-// =====================================================
-// 🧾 CONFIGURACIÓN DEL TICKET POS — MODIFICAR SOLO AQUÍ
-// =====================================================
-// Ancho real de la CX-POS: 42 caracteres por línea.
-const TICKET_CODIGO = 7;
-const TICKET_PRODUCTO = 23;
-const TICKET_CANTIDAD = 3;
-// El precio ocupa automáticamente el espacio restante.
-
 const POS_CODEPAGE = 'IBM437';
 
 const POS_ESC = '\x1B';
@@ -1772,56 +1851,13 @@ function posTruncar(texto, ancho) {
 }
 
 function posColumnas(codigo, producto, cant, precio) {
-  // Columnas configurables. El producto puede ocupar 2 o más líneas
-  // para NO cortar el nombre.
-  const cCod = TICKET_CODIGO;
-  const cProd = TICKET_PRODUCTO;
-  const cCant = TICKET_CANTIDAD;
+  const cCod = 12, cProd = 15, cCant = 5;
   const cPrecio = POS_ANCHO - cCod - cProd - cCant;
-
-  const cod = posLimpiarTexto(codigo);
-  const prod = posLimpiarTexto(producto);
-
-  // Divide el nombre por palabras, respetando el ancho disponible.
-  const palabras = prod.split(/\s+/).filter(Boolean);
-  const lineasProducto = [];
-  let linea = '';
-
-  palabras.forEach(palabra => {
-    if (!linea) {
-      linea = palabra;
-    } else if ((linea + ' ' + palabra).length <= cProd) {
-      linea += ' ' + palabra;
-    } else {
-      lineasProducto.push(linea);
-      linea = palabra;
-    }
-  });
-  if (linea || lineasProducto.length === 0) lineasProducto.push(linea);
-
-  // Si una sola palabra supera el ancho, la parte en bloques para no perderla.
-  const ajustadas = [];
-  lineasProducto.forEach(l => {
-    while (l.length > cProd) {
-      ajustadas.push(l.slice(0, cProd));
-      l = l.slice(cProd);
-    }
-    ajustadas.push(l);
-  });
-
-  const col1 = posTruncar(cod, cCod - 1).padEnd(cCod);
+  const col1 = posTruncar(codigo, cCod - 1).padEnd(cCod);
+  const col2 = posTruncar(producto, cProd - 1).padEnd(cProd);
   const col3 = String(cant).padStart(cCant);
   const col4 = String(precio).padStart(cPrecio);
-
-  // Primera línea lleva código, producto, cantidad y precio.
-  let resultado = col1 + posTruncar(ajustadas[0], cProd).padEnd(cProd) + col3 + col4;
-
-  // Las siguientes líneas quedan debajo del nombre del producto.
-  for (let n = 1; n < ajustadas.length; n++) {
-    resultado += '\n' + ' '.repeat(cCod) + posTruncar(ajustadas[n], cProd).padEnd(cProd);
-  }
-
-  return resultado;
+  return col1 + col2 + col3 + col4;
 }
 
 function posLinea() {
@@ -1840,8 +1876,6 @@ function construirTicketVentaPOS(venta) {
   t += POS_ALTO_OFF + POS_NEGRITA_OFF;
   t += posLimpiarTexto('COMPROBANTE DE VENTA') + '\n';
   t += POS_ALINEAR_IZQ;
-  // Texto del cuerpo más grande (doble alto, mismo ancho de 42 columnas).
-  t += POS_ALTO_ON;
   t += posLinea();
   t += `Fecha: ${posLimpiarTexto(venta.fecha)}    Hora: ${posLimpiarTexto(venta.hora)}\n`;
 
