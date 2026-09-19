@@ -153,7 +153,7 @@
               <span>Total venta</span>
               <span id="vt-total">$0</span>
             </div>
-            <div id="metodo-pago-box">
+                        <div id="metodo-pago-box">
               <p>Método de pago</p>
               <div id="metodo-pago-opciones">
                 <label>
@@ -163,6 +163,32 @@
                 <label>
                   <input type="radio" name="metodo-pago" value="transferencia">
                   🏦 Transferencia
+                </label>
+                <label>
+                  <input type="radio" name="metodo-pago" value="mixto">
+                  🔀 Pago mixto
+                </label>
+              </div>
+              <div id="pago-mixto-box" class="hidden">
+                <label>Efectivo: <input type="number" id="pago-mixto-efectivo" min="0" value="0"></label>
+                <label>Transferencia: <input type="number" id="pago-mixto-transferencia" min="0" value="0"></label>
+                <div id="pago-mixto-restante"></div>
+              </div>
+            </div>
+            <div id="tipo-documento-box">
+              <p>Documento a emitir</p>
+              <div id="tipo-documento-opciones">
+                <label>
+                  <input type="radio" name="tipo-documento" value="pos" checked="">
+                  🧾 POS electrónico
+                </label>
+                <label>
+                  <input type="radio" name="tipo-documento" value="factura">
+                  📄 Factura electrónica
+                </label>
+                <label>
+                  <input type="radio" name="tipo-documento" value="ninguno">
+                  ⛔ No facturar en Alegra
                 </label>
               </div>
             </div>

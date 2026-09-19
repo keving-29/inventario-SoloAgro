@@ -142,7 +142,8 @@ async function sincronizar(ventasDias) {
     DB.productos = datos.Productos.slice(1).map(f => ({
       id: String(f[0]), ref: String(f[1]||''), nombre: String(f[2]||''),
       pcompra: Number(f[3])||0, pventa1: Number(f[4])||0,
-      pventa2: Number(f[5])||0, stock: Number(f[6])||0
+      pventa2: Number(f[5])||0, stock: Number(f[6])||0,
+      alegraId: String(f[7]||'')
     }));
   }
 
@@ -2747,6 +2748,21 @@ async function confirmarVenta() {
   const ganancia=carrito.reduce((a,i)=>a+(i.precio-i.pcompra)*i.cantidad,0);
   const nota=document.getElementById('venta-nota').value.trim();
   const metodoPago=document.querySelector('input[name="metodo-pago"]:checked').value;
+  const tipoDocumento=document.querySelector('input[name="tipo-documento"]:checked').value;
+
+  let pagos = [];
+  if (metodoPago === 'mixto') {
+    const efectivo = parseFloat(document.getElementById('pago-mixto-efectivo').value)||0;
+    const transferencia = parseFloat(document.getElementById('pago-mixto-transferencia').value)||0;
+    if (Math.round(efectivo+transferencia) !== Math.round(total)) {
+      alert('El pago mixto no cuadra con el total de la venta.');
+      return;
+    }
+    if (efectivo>0) pagos.push({metodo:'efectivo', monto:efectivo});
+    if (transferencia>0) pagos.push({metodo:'transferencia', monto:transferencia});
+  } else {
+    pagos.push({metodo: metodoPago, monto: total});
+  }
 
   for (const item of carrito) {
     const p = DB.productos.find(x=>x.id===item.id);
@@ -2766,8 +2782,33 @@ async function confirmarVenta() {
   await sheetsEscribir('append','Ventas',[venta.id,venta.fecha,venta.hora,venta.total,venta.ganancia,venta.nota,venta.metodoPago,JSON.stringify(venta.items),venta.clienteId,venta.clienteNombre,venta.clienteCedula,venta.clienteTelefono,venta.clienteDireccion,'','']);
 
   guardarLocal();
-  mostrarToast(`Venta registrada · ${metodoPago==='transferencia'?'🏦':'💵'} ${fmt(total)}`);
+  mostrarToast(`Venta registrada · ${metodoPago==='transferencia'?'🏦':metodoPago==='mixto'?'🔀':'💵'} ${fmt(total)}`);
   imprimirBoucher(venta);
+
+  if (tipoDocumento !== 'ninguno') {
+    try {
+      const fechaISO = ahora.toISOString().slice(0,10);
+      const datosAlegra = {
+        tipoDocumento,
+        fecha: fechaISO,
+        items: venta.items.map(i => ({ alegraId: DB.productos.find(p=>p.id===i.id)?.alegraId, nombre: i.nombre, precio: i.precio, cantidad: i.cantidad })),
+        pagos,
+        cliente: clienteVenta ? { nombre: clienteVenta.nombre, cedula: clienteVenta.cedula } : null
+      };
+      const r = await fetchConTimeout(SCRIPT_URL, {
+        method:'POST',
+        body: JSON.stringify({ action:'facturarAlegra', sheet:'Ventas', venta: datosAlegra })
+      });
+      const resp = await r.json();
+      if (resp.ok) {
+        mostrarToast(`Documento Alegra creado: ${resp.alegraNumero||resp.alegraId}`);
+      } else {
+        mostrarToast(`⚠️ Venta guardada, pero Alegra falló: ${resp.error}`);
+      }
+    } catch (e) {
+      mostrarToast(`⚠️ Venta guardada, pero no se pudo contactar Alegra.`);
+    }
+  }
 
   carrito=[];
   renderCarrito();
@@ -2779,6 +2820,9 @@ async function confirmarVenta() {
   resultadosVenta=[];
   document.getElementById('venta-nota').value='';
   document.querySelector('input[name="metodo-pago"][value="efectivo"]').checked=true;
+  document.getElementById('pago-mixto-box').classList.add('hidden');
+  document.getElementById('pago-mixto-efectivo').value=0;
+  document.getElementById('pago-mixto-transferencia').value=0;
   setTimeout(()=>document.getElementById('venta-search').focus(),150);
 }
 
@@ -3134,6 +3178,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-limpiar-carrito').addEventListener('click',()=>{ carrito=[]; renderCarrito(); });
   document.getElementById('btn-confirmar-venta').addEventListener('click', confirmarVenta);
+
+  document.querySelectorAll('input[name="metodo-pago"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const mixto = document.querySelector('input[name="metodo-pago"]:checked').value === 'mixto';
+      document.getElementById('pago-mixto-box').classList.toggle('hidden', !mixto);
+    });
+  });
+
+  ['pago-mixto-efectivo','pago-mixto-transferencia'].forEach(idInput => {
+    document.getElementById(idInput).addEventListener('input', actualizarRestantePagoMixto);
+  });
+
+  function actualizarRestantePagoMixto() {
+    const total = carrito.reduce((a,i)=>a+i.total,0);
+    const efectivo = parseFloat(document.getElementById('pago-mixto-efectivo').value)||0;
+    const transferencia = parseFloat(document.getElementById('pago-mixto-transferencia').value)||0;
+    const restante = total - efectivo - transferencia;
+    document.getElementById('pago-mixto-restante').textContent =
+      restante === 0 ? 'Cuadrado ✓' : `Falta: ${fmt(Math.abs(restante))}`;
+  }
 
   // Modal precio (carrito)
   document.getElementById('mpv-btn-precio1').addEventListener('click',()=>seleccionarPrecio(1));
