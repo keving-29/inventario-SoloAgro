@@ -2795,10 +2795,10 @@ async function confirmarVenta() {
         pagos,
         cliente: clienteVenta ? { nombre: clienteVenta.nombre, cedula: clienteVenta.cedula } : null
       };
-      const r = await fetchConTimeout(SCRIPT_URL, {
+            const r = await fetchConTimeout(SCRIPT_URL, {
         method:'POST',
         body: JSON.stringify({ action:'facturarAlegra', sheet:'Ventas', venta: datosAlegra })
-      });
+      }, 30000);
       const resp = await r.json();
       if (resp.ok) {
         mostrarToast(`Documento Alegra creado: ${resp.alegraNumero||resp.alegraId}`);
