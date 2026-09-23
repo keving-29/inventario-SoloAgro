@@ -2787,7 +2787,7 @@ async function confirmarVenta() {
 
   if (tipoDocumento !== 'ninguno') {
     try {
-      const fechaISO = ahora.toISOString().slice(0,10);
+      const fechaISO = ahora.getFullYear() + '-' + String(ahora.getMonth()+1).padStart(2,'0') + '-' + String(ahora.getDate()).padStart(2,'0');
       const datosAlegra = {
         tipoDocumento,
         fecha: fechaISO,
