@@ -256,6 +256,8 @@ body {
 .metric.dorado .mvalue { color: var(--dorado-oscuro); }
 .metric.alerta .mvalue { color: #BA7517; }
 .metric.danger .mvalue { color: #A32D2D; }
+.metric-clickeable { cursor: pointer; transition: transform 0.1s; }
+.metric-clickeable:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
 
 /* TABLAS */
 .tabla-wrap { overflow-x: auto; }

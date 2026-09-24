@@ -37,6 +37,7 @@
           <button class="nav-tab active" data-tab="dashboard"><i class="ti ti-chart-bar"></i> Resumen</button>
           <button class="nav-tab" data-tab="inventario"><i class="ti ti-package"></i> Inventario</button>
           <button class="nav-tab" data-tab="ventas"><i class="ti ti-shopping-bag"></i> Vender</button>
+          <button class="nav-tab" data-tab="clientes"><i class="ti ti-address-book"></i> Clientes</button>
           <button class="nav-tab" data-tab="cotizacion"><i class="ti ti-file-invoice"></i> Cotización</button>
           <button class="nav-tab" data-tab="traslado"><i class="ti ti-truck"></i> Traslado</button>
           <button class="nav-tab" data-tab="deudores"><i class="ti ti-users"></i> Deudores</button>
@@ -198,6 +199,18 @@
               <button class="btn-primary" id="btn-confirmar-venta">Confirmar venta</button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <!-- CLIENTES -->
+      <section id="panel-clientes" class="panel">
+        <div class="card">
+          <div class="section-header">
+            <h2>Clientes</h2>
+            <button class="btn-primary" id="btn-abrir-modal-cliente">+ Agregar cliente</button>
+          </div>
+          <input type="text" id="clientes-search" placeholder="Buscar por nombre o cédula/NIT...">
+          <div id="clientes-contenido"></div>
         </div>
       </section>
 
@@ -478,15 +491,24 @@
     </div>
   </div>
 
-  <!-- MODAL: Nuevo cliente -->
+  <!-- MODAL: Nuevo/Editar cliente -->
   <div id="modal-cliente" class="modal-bg hidden">
     <div class="modal">
       <div class="modal-header">
-        <h3>Nuevo cliente</h3>
+        <h3 id="modal-cliente-titulo">Nuevo cliente</h3>
         <button class="btn-cerrar-modal" data-modal="modal-cliente">✕</button>
       </div>
       <input type="text" id="cliente-nombre" placeholder="Nombre completo *">
-      <input type="text" id="cliente-cedula" placeholder="Número de cédula *">
+      <label style="font-size:12px;color:var(--texto2);display:block;margin:6px 0 2px">Tipo de documento</label>
+      <select id="cliente-tipodoc">
+        <option value="CC">CC — Cédula de ciudadanía</option>
+        <option value="NIT">NIT — Empresa / Persona jurídica</option>
+        <option value="CE">CE — Cédula de extranjería</option>
+        <option value="PEP">PEP — Permiso especial de permanencia</option>
+        <option value="PP">PP — Pasaporte</option>
+        <option value="TI">TI — Tarjeta de identidad</option>
+      </select>
+      <input type="text" id="cliente-cedula" placeholder="Número de documento *">
       <input type="text" id="cliente-telefono" placeholder="Teléfono">
       <input type="text" id="cliente-direccion" placeholder="Dirección">
       <input type="email" id="cliente-correo" placeholder="Correo">
@@ -700,6 +722,38 @@
       <p style="font-size:13px;color:var(--texto2);margin:10px 0 6px">Precio unitario</p>
       <input type="number" id="cq-precio" min="0">
       <button class="btn-primary" id="btn-cq-agregar" style="width:100%;margin-top:10px">Agregar a la cotización</button>
+    </div>
+  </div>
+
+  <!-- MODAL: Lista de productos sin stock / stock bajo (desde Resumen) -->
+  <div id="modal-stock" class="modal-bg hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-stock-titulo">Productos</h3>
+        <button class="btn-cerrar-modal" data-modal="modal-stock">✕</button>
+      </div>
+      <div id="modal-stock-contenido" style="max-height:60vh;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: Nota crédito (sobre una venta ya facturada en Alegra) -->
+  <div id="modal-nota-credito" class="modal-bg hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Nota crédito</h3>
+        <button class="btn-cerrar-modal" data-modal="modal-nota-credito">✕</button>
+      </div>
+      <p id="nc-factura-info" style="font-size:13px;color:var(--texto2);margin-bottom:10px"></p>
+      <p style="font-size:12px;color:var(--texto2);margin-bottom:6px">Ajusta las cantidades a acreditar (déjalas igual para anular el total):</p>
+      <div id="nc-items-lista" style="max-height:35vh;overflow-y:auto;margin-bottom:10px"></div>
+      <input type="text" id="nc-motivo" placeholder="Motivo (ej: devolución, error de facturación)">
+      <div style="margin:10px 0;font-weight:600;display:flex;justify-content:space-between">
+        <span>Total a acreditar:</span><span id="nc-total">$0</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-cerrar-modal" data-modal="modal-nota-credito" style="flex:1">Cancelar</button>
+        <button class="btn-primary" id="btn-confirmar-nota-credito" style="flex:1">Crear nota crédito</button>
+      </div>
     </div>
   </div>
 
