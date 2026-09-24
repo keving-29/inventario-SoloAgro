@@ -226,7 +226,20 @@
           </div>
           <p style="font-size:12px;color:var(--texto2);margin-bottom:1rem">Arma una cotización para el cliente. No descuenta stock ni se registra como venta.</p>
 
-          <input type="text" id="cot-cliente" placeholder="Nombre del cliente (opcional)" style="margin-bottom:1rem">
+          <p style="font-size:11px;color:var(--texto2);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Cliente registrado (opcional)</p>
+          <div id="cotizacion-cliente-busqueda-box">
+            <input type="text" id="cotizacion-cliente-buscar" placeholder="Buscar cliente por nombre o cédula...">
+            <div id="cotizacion-cliente-resultados"></div>
+          </div>
+          <div id="cotizacion-cliente-seleccionado" class="producto-seleccionado-box hidden">
+            <div class="producto-seleccionado-info">
+              <strong id="cotizacion-cliente-nombre"></strong>
+              <span id="cotizacion-cliente-detalle"></span>
+            </div>
+            <button type="button" class="btn-peligro" id="btn-quitar-cliente-cotizacion" style="padding:6px 10px"><i class="ti ti-x"></i></button>
+          </div>
+
+          <input type="text" id="cot-cliente" placeholder="O escribe el nombre (si el cliente no está registrado)" style="margin-bottom:1rem">
 
           <div id="cotizacion-busqueda-box">
             <input type="text" id="cotizacion-search" placeholder="Buscar producto y presiona Enter...">

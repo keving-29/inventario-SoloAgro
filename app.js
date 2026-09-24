@@ -63,6 +63,7 @@ const VENTAS_DIAS_SYNC_LIGERO = 120;
 // Clientes (venta / deudor / anticipo)
 const buscadoresCliente = {};
 let clienteVenta = null;
+let clienteCotizacion = null;
 let clienteDeudor = null;
 let clienteAnticipo = null;
 let clienteModalContexto = null;
@@ -861,6 +862,8 @@ function construirHtmlCotizacionPrint(fecha, cliente, items) {
       <td>${fmt(i.cantidad*i.precio)}</td>
     </tr>`).join('');
 
+  const nombreCliente = (cliente && cliente.nombre) ? cliente.nombre : 'Consumidor final';
+
   return `
     <div id="tp-header">
       <h1>Multirepuestos SoloAgro</h1>
@@ -869,8 +872,11 @@ function construirHtmlCotizacionPrint(fecha, cliente, items) {
     </div>
     <div id="tp-meta">
       <span><strong>Fecha:</strong> ${fecha}</span>
-      <span><strong>Cliente:</strong> ${esc(cliente || 'Consumidor final')}</span>
+      <span><strong>Cliente:</strong> ${esc(nombreCliente)}</span>
     </div>
+    ${cliente && cliente.cedula ? `<p style="font-size:13px;margin-bottom:4px"><strong>${esc(cliente.tipoDoc||'CC')}:</strong> ${esc(cliente.cedula)}</p>` : ''}
+    ${cliente && cliente.telefono ? `<p style="font-size:13px;margin-bottom:4px"><strong>Teléfono:</strong> ${esc(cliente.telefono)}</p>` : ''}
+    ${cliente && cliente.direccion ? `<p style="font-size:13px;margin-bottom:4px"><strong>Dirección:</strong> ${esc(cliente.direccion)}</p>` : ''}
     <table>
       <thead><tr><th>#</th><th>Código</th><th>Producto</th><th>Cant.</th><th>Precio unit.</th><th>Valor total</th></tr></thead>
       <tbody>${filas}</tbody>
@@ -882,10 +888,12 @@ function construirHtmlCotizacionPrint(fecha, cliente, items) {
 
 function imprimirCotizacion() {
   if (cotizacion.length === 0) { alert('Agrega productos a la cotización antes de imprimir'); return; }
-  const cliente = document.getElementById('cot-cliente').value.trim();
+  const nombreLibre = document.getElementById('cot-cliente').value.trim();
   const fecha = fechaCO(new Date());
 
-  document.getElementById('cotizacion-print-contenido').innerHTML = construirHtmlCotizacionPrint(fecha, cliente, cotizacion);
+  const clienteInfo = clienteCotizacion || (nombreLibre ? { nombre: nombreLibre } : null);
+
+  document.getElementById('cotizacion-print-contenido').innerHTML = construirHtmlCotizacionPrint(fecha, clienteInfo, cotizacion);
   prepararImpresion('cotizacion-print');
   window.print();
 }
@@ -895,6 +903,7 @@ function limpiarCotizacion() {
   if (!confirm('¿Vaciar la cotización actual?')) return;
   cotizacion = [];
   document.getElementById('cot-cliente').value = '';
+  quitarClienteCotizacion();
   renderCotizacion();
 }
 
@@ -1130,6 +1139,21 @@ function seleccionarClienteVenta(c) {
 function quitarClienteVenta() {
   clienteVenta = null;
   document.getElementById('venta-cliente-seleccionado').classList.add('hidden');
+}
+
+function seleccionarClienteCotizacion(c) {
+  clienteCotizacion = c;
+  document.getElementById('cotizacion-cliente-nombre').textContent = c.nombre;
+  document.getElementById('cotizacion-cliente-detalle').textContent = `${c.tipoDoc||'CC'} ${c.cedula}${c.telefono?' · Tel: '+c.telefono:''}`;
+  document.getElementById('cotizacion-cliente-seleccionado').classList.remove('hidden');
+  document.getElementById('cotizacion-cliente-buscar').value = '';
+  document.getElementById('cotizacion-cliente-resultados').innerHTML = '';
+  document.getElementById('cot-cliente').value = '';
+}
+
+function quitarClienteCotizacion() {
+  clienteCotizacion = null;
+  document.getElementById('cotizacion-cliente-seleccionado').classList.add('hidden');
 }
 
 function seleccionarClienteDeudor(c) {
@@ -1663,8 +1687,8 @@ function renderProductosAnticipo() {
 
 async function guardarAnticipoEnSheet(a, esNuevo) {
   const fila = [a.id,a.clienteId,a.nombre,a.cedula,a.telefono,a.direccion,JSON.stringify(a.productos||[]),a.monto,a.nota,a.fecha,a.hora,a.fechaLimite,JSON.stringify(a.abonos),a.pagada,a.descontado];
-  if (esNuevo) { await sheetsEscribir('append','Anticipos',fila); }
-  else { await sheetsEscribir('update','Anticipos',fila,a.id); }
+  if (esNuevo) return await sheetsEscribir('append','Anticipos',fila);
+  return await sheetsEscribir('update','Anticipos',fila,a.id);
 }
 
 function abrirModalAnticipo(id) {
@@ -1809,8 +1833,8 @@ function proveedorPorVencer(p) {
 
 async function guardarProveedorEnSheet(p, esNuevo) {
   const fila = [p.id,p.empresa,p.fechaLlegadaPedido,p.monto,p.numeroCuotas,p.fechaLimite,p.fecha,p.hora,JSON.stringify(p.abonos),p.pagada];
-  if (esNuevo) { await sheetsEscribir('append','Proveedores',fila); }
-  else { await sheetsEscribir('update','Proveedores',fila,p.id); }
+  if (esNuevo) return await sheetsEscribir('append','Proveedores',fila);
+  return await sheetsEscribir('update','Proveedores',fila,p.id);
 }
 
 function abrirModalProveedor() {
@@ -2009,6 +2033,7 @@ async function guardarGasto() {
   guardarLocal();
   cerrarModal('modal-gasto');
   renderGastos();
+  renderDashboard();
   mostrarToast('Gasto registrado ✓');
 }
 
@@ -2016,7 +2041,7 @@ async function eliminarGasto(id) {
   if (!confirm('¿Eliminar este gasto?')) return;
   await sheetsEscribir('delete','Gastos',null,id);
   DB.gastos = DB.gastos.filter(g => g.id!==id);
-  guardarLocal(); renderGastos(); mostrarToast('Gasto eliminado');
+  guardarLocal(); renderGastos(); renderDashboard(); mostrarToast('Gasto eliminado');
 }
 
 function renderGastos() {
@@ -2093,7 +2118,9 @@ function mostrarModalStock(tipo) {
 function renderDashboard() {
   const hoy = fechaCO();
   const ventasHoy = DB.ventas.filter(v => v.fecha === hoy);
-  const totalVendido  = ventasHoy.reduce((a,v) => a+v.total, 0);
+  const totalVendidoBruto = ventasHoy.reduce((a,v) => a+v.total, 0);
+  const gastosHoy = DB.gastos.filter(g => g.fecha === hoy).reduce((a,g) => a+g.monto, 0);
+  const totalVendido = totalVendidoBruto - gastosHoy;
   const sinStock  = DB.productos.filter(p => p.stock <= 0).length;
   const stockBajo = DB.productos.filter(p => p.stock > 0 && p.stock <= DB.config.stockMin).length;
   const deudasVencidas = DB.deudores.filter(d => deudaVencida(d)).length;
@@ -2104,7 +2131,8 @@ function renderDashboard() {
   document.getElementById('dash-fecha').textContent = 'Hoy · ' + new Date().toLocaleDateString('es-CO',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
   document.getElementById('dash-metrics').innerHTML = `
-    <div class="metric rosa"><div class="mlabel">Total vendido hoy</div><div class="mvalue">${fmt(totalVendido)}</div></div>
+    <div class="metric rosa"><div class="mlabel">Total vendido hoy (neto)</div><div class="mvalue">${fmt(totalVendido)}</div></div>
+    ${gastosHoy>0?`<div class="metric danger"><div class="mlabel">Gastos de hoy</div><div class="mvalue">${fmt(gastosHoy)}</div></div>`:''}
     <div class="metric"><div class="mlabel">Transacciones</div><div class="mvalue">${ventasHoy.length}</div></div>
     <div class="metric"><div class="mlabel">Productos</div><div class="mvalue">${DB.productos.length}</div></div>
     ${stockBajo>0?`<div class="metric alerta metric-clickeable" data-stock="bajo"><div class="mlabel">Stock bajo</div><div class="mvalue">${stockBajo}</div></div>`:''}
@@ -3040,7 +3068,42 @@ async function confirmarNotaCredito() {
     const resp = await r.json();
 
     if (resp.ok) {
-      mostrarToast(`Nota crédito creada: ${resp.notaCreditoNumero||resp.notaCreditoId}`);
+
+      // Devolver el stock de los productos acreditados.
+      for (const item of itemsCredito) {
+        const p = DB.productos.find(x => x.id === item.id);
+        if (p) {
+          p.stock = p.stock + item.cantidadCredito;
+          await sheetsEscribir('update','Productos',[p.id,p.ref,p.nombre,p.pcompra,p.pventa1,p.pventa2,p.stock],p.id);
+        }
+      }
+
+      // Registrar el descuento como un movimiento negativo en Ventas, para
+      // que el total vendido del día (Dashboard/Historial/Reportes) quede
+      // neto automáticamente, sin tocar el registro original de la venta.
+      const totalCredito = itemsCredito.reduce((a,i)=>a+i.precio*i.cantidadCredito,0);
+      const gananciaCredito = itemsCredito.reduce((a,i)=>a+((i.precio-(i.pcompra||0))*i.cantidadCredito),0);
+      const ahoraNC = new Date();
+
+      const ventaDevolucion = {
+        id: uid(), fecha: fechaCO(ahoraNC), hora: horaCO(ahoraNC),
+        total: -totalCredito, ganancia: -gananciaCredito,
+        nota: `Nota crédito de ${v.alegraNumero||v.alegraId}${motivo?': '+motivo:''}`,
+        metodoPago: v.metodoPago,
+        items: itemsCredito.map(i => ({...i, cantidad: i.cantidadCredito, total: i.precio*i.cantidadCredito})),
+        clienteId: v.clienteId||'', clienteNombre: v.clienteNombre||'',
+        clienteCedula: v.clienteCedula||'', clienteTelefono: v.clienteTelefono||'',
+        clienteDireccion: v.clienteDireccion||'',
+        alegraId: resp.notaCreditoId||'', alegraNumero: resp.notaCreditoNumero||''
+      };
+      DB.ventas.push(ventaDevolucion);
+      await sheetsEscribir('append','Ventas',[ventaDevolucion.id,ventaDevolucion.fecha,ventaDevolucion.hora,ventaDevolucion.total,ventaDevolucion.ganancia,ventaDevolucion.nota,ventaDevolucion.metodoPago,JSON.stringify(ventaDevolucion.items),ventaDevolucion.clienteId,ventaDevolucion.clienteNombre,ventaDevolucion.clienteCedula,ventaDevolucion.clienteTelefono,ventaDevolucion.clienteDireccion,'','',ventaDevolucion.alegraId,ventaDevolucion.alegraNumero]);
+
+      guardarLocal();
+      renderDashboard();
+      renderHistorial();
+
+      mostrarToast(`Nota crédito creada: ${resp.notaCreditoNumero||resp.notaCreditoId} · Stock devuelto`);
       cerrarModal('modal-nota-credito');
     } else {
       alert('No se pudo crear la nota crédito:\n\n' + resp.error);
@@ -3484,6 +3547,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('ct-cantidad').addEventListener('keydown', e => { if (e.key==='Enter') confirmarCantidadTraslado(); });
 
   const cotizacionSearch = document.getElementById('cotizacion-search');
+  inicializarBuscadorCliente('cotizacion', 'cotizacion-cliente-buscar', 'cotizacion-cliente-resultados', seleccionarClienteCotizacion);
+  document.getElementById('btn-quitar-cliente-cotizacion').addEventListener('click', quitarClienteCotizacion);
   cotizacionSearch.addEventListener('input', buscarProductoCotizacion);
   cotizacionSearch.addEventListener('keydown', e => {
     if (resultadosCotizacion.length === 0) return;
