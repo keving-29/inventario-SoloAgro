@@ -107,12 +107,13 @@ async function sheetsLeer(ventasDias) {
 // un update/delete caiga en la fila equivocada cuando el array local y las
 // filas reales de la hoja quedan desalineados (por una fila vieja, un delete
 // anterior, o una sincronización a medio camino).
-async function sheetsEscribir(accion, hoja, datos, filaOId) {
+async function sheetsEscribir(accion, hoja, datos, filaOId, columna) {
   try {
     setSyncStatus('cargando');
     const body = { action: accion, sheet: hoja, data: datos };
     if (typeof filaOId === 'number') body.row = filaOId;
     else if (filaOId) body.id = filaOId;
+    if (columna) body.columna = columna;
 
     const r = await fetchConTimeout(SCRIPT_URL, {
       method: 'POST',
@@ -146,7 +147,11 @@ async function sincronizar(ventasDias) {
       id: String(f[0]), ref: String(f[1]||''), nombre: String(f[2]||''),
       pcompra: Number(f[3])||0, pventa1: Number(f[4])||0,
       pventa2: Number(f[5])||0, stock: Number(f[6])||0,
-      alegraId: String(f[7]||'')
+      alegraId: String(f[7]||''),
+      // Columna I (f[8]) es "unidadOK", uso interno de la migración a
+      // Alegra — no se toca desde aquí. El código de barras de fábrica va
+      // en la columna J (f[9]), aparte, para no chocar con nada de eso.
+      codigoBarras: String(f[9]||'')
     }));
   }
 
@@ -292,6 +297,26 @@ function esc(t) {
 // Tasa de IVA usada en el ticket, la cotización y el helper de precio+IVA
 // al agregar un producto. Colombia: 19%.
 const TASA_IVA = 0.19;
+
+// Búsqueda de producto por texto (nombre, Ref propia, o código de barras
+// de fábrica si el producto lo tiene guardado). Se usa en todos los
+// buscadores (Ventas, Inventario, Traslado, Cotización, Deudores,
+// Anticipos) para que escribir o escanear cualquiera de los tres siempre
+// encuentre el producto.
+function productoCoincideTexto(p, q) {
+  return p.nombre.toLowerCase().includes(q)
+    || p.ref.toLowerCase().includes(q)
+    || (p.codigoBarras && p.codigoBarras.toLowerCase().includes(q));
+}
+
+// Coincidencia EXACTA por Ref o código de barras — esto es lo que distingue
+// un escaneo (el lector manda el código completo + Enter) de una búsqueda
+// manual por nombre.
+function productoCoincideExacto(p, q) {
+  const qq = q.toLowerCase();
+  return p.ref.toLowerCase() === qq
+    || (p.codigoBarras && p.codigoBarras.toLowerCase() === qq);
+}
 
 // Convierte un número entero de pesos a su forma escrita en español,
 // para el "Valor en letras" del ticket y la cotización.
@@ -537,7 +562,7 @@ function buscarProductoTraslado() {
   if (!q) { cont.innerHTML=''; resultadosTraslado=[]; return; }
 
   resultadosTraslado = DB.productos
-    .filter(p => p.nombre.toLowerCase().includes(q) || p.ref.toLowerCase().includes(q))
+    .filter(p => productoCoincideTexto(p, q))
     .slice(0,8);
 
   if (resultadosTraslado.length===0) { cont.innerHTML='<p style="font-size:13px;color:var(--texto2);padding:8px 0">Sin resultados</p>'; return; }
@@ -756,7 +781,7 @@ function buscarProductoCotizacion() {
   if (!q) { cont.innerHTML=''; resultadosCotizacion=[]; return; }
 
   resultadosCotizacion = DB.productos
-    .filter(p => p.nombre.toLowerCase().includes(q) || p.ref.toLowerCase().includes(q))
+    .filter(p => productoCoincideTexto(p, q))
     .slice(0,8);
 
   if (resultadosCotizacion.length===0) { cont.innerHTML='<p style="font-size:13px;color:var(--texto2);padding:8px 0">Sin resultados</p>'; return; }
@@ -953,7 +978,7 @@ function inicializarBuscadorProducto(key, inputId, resultadosId, onSeleccionar) 
     const estado = buscadoresProducto[key];
     estado.indice = 0;
     if (!q) { cont.innerHTML=''; estado.resultados=[]; return; }
-    estado.resultados = DB.productos.filter(p => p.nombre.toLowerCase().includes(q) || p.ref.toLowerCase().includes(q)).slice(0,8);
+    estado.resultados = DB.productos.filter(p => productoCoincideTexto(p, q)).slice(0,8);
     if (estado.resultados.length===0) { cont.innerHTML = '<p style="font-size:13px;color:var(--texto2);padding:8px 0">Sin resultados</p>'; return; }
     renderizar();
   });
@@ -2553,8 +2578,7 @@ async function probarImpresoraPOS() {
 // =============================================
 function renderInventario() {
   const q = document.getElementById('inv-search').value.toLowerCase();
-  const prods = DB.productos.filter(p =>
-    p.nombre.toLowerCase().includes(q) || p.ref.toLowerCase().includes(q));
+  const prods = DB.productos.filter(p => productoCoincideTexto(p, q));
   const cont = document.getElementById('inv-contenido');
 
   if (prods.length === 0) {
@@ -2577,6 +2601,7 @@ function renderInventario() {
       <td>${p.stock} ${badge}</td>
       <td><div style="display:flex;gap:6px">
         <button class="btn-secundario btn-editar-producto" data-id="${p.id}" style="padding:6px 10px"><i class="ti ti-edit"></i></button>
+        <button class="btn-secundario btn-imprimir-etiqueta" data-id="${p.id}" style="padding:6px 10px" title="Imprimir etiqueta de código de barras"><i class="ti ti-barcode"></i></button>
         <button class="btn-peligro btn-eliminar-producto" data-id="${p.id}" style="padding:6px 10px"><i class="ti ti-trash"></i></button>
       </div></td>
     </tr>`;
@@ -2594,18 +2619,75 @@ function renderInventario() {
     </div>`;
 
   cont.querySelectorAll('.btn-editar-producto').forEach(b => b.addEventListener('click', () => abrirModalProducto(b.dataset.id)));
+  cont.querySelectorAll('.btn-imprimir-etiqueta').forEach(b => b.addEventListener('click', () => imprimirEtiquetaProducto(b.dataset.id)));
   cont.querySelectorAll('.btn-eliminar-producto').forEach(b => b.addEventListener('click', () => eliminarProducto(b.dataset.id)));
   cont.querySelectorAll('.precio-oculto').forEach(b => b.addEventListener('click', pedirPin));
   const btnVerMas = document.getElementById('btn-ver-mas-inventario');
   if (btnVerMas) btnVerMas.addEventListener('click', () => { inventarioMostrar += 10; renderInventario(); });
 }
 
-function abrirModalProducto(id, refPrellenada) {
+// =============================================
+// IMPRIMIR ETIQUETA DE CÓDIGO DE BARRAS
+// =============================================
+// Para los repuestos que NO traen código de barras de fábrica: se genera
+// uno propio a partir de la Ref del producto (que ya es única para cada
+// producto) y se imprime en una etiqueta chiquita con el nombre y el
+// precio. Se pega esa etiqueta al producto o a su lugar en la repisa, y de
+// ahí en adelante se escanea igual que cualquier otro código.
+// Si el producto SÍ tiene guardado un código de barras de fábrica, se
+// imprime ese en vez de inventar uno nuevo.
+function imprimirEtiquetaProducto(id) {
+  const p = DB.productos.find(x => x.id === id);
+  if (!p) return;
+
+  const codigo = (p.codigoBarras && p.codigoBarras.trim()) ? p.codigoBarras.trim() : p.ref;
+  if (!codigo) { alert('Este producto no tiene Ref ni código de barras para imprimir.'); return; }
+
+  const ventana = window.open('', '_blank', 'width=420,height=320');
+  if (!ventana) { alert('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para este sitio e intenta de nuevo.'); return; }
+
+  ventana.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Etiqueta — ${esc(p.nombre)}</title>
+      <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+      <style>
+        @page { margin: 4mm; }
+        body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 10px; }
+        .etiqueta { display: inline-block; border: 1px dashed #ccc; padding: 8px 12px; }
+        .nombre { font-size: 12px; font-weight: bold; margin-bottom: 2px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .precio { font-size: 14px; font-weight: bold; margin-top: 2px; }
+      </style>
+    </head>
+    <body>
+      <div class="etiqueta">
+        <div class="nombre">${esc(p.nombre)}</div>
+        <svg id="barras"></svg>
+        <div class="precio">${fmt(p.pventa1)}</div>
+      </div>
+      <script>
+        try {
+          JsBarcode("#barras", ${JSON.stringify(codigo)}, { format: "CODE128", width: 2, height: 50, fontSize: 14, margin: 4 });
+        } catch (e) {
+          document.body.innerHTML = '<p style="color:red">No se pudo generar el código de barras: ' + e + '</p>';
+        }
+        window.onload = () => setTimeout(() => window.print(), 300);
+      <\/script>
+    </body>
+    </html>
+  `);
+  ventana.document.close();
+}
+
+function abrirModalProducto(id, codigoBarrasPrellenado) {
   editandoProductoId = id || null;
   document.getElementById('modal-prod-titulo').textContent = id ? 'Editar producto' : 'Agregar producto';
   if (id) {
     const p = DB.productos.find(x => x.id === id);
     if (!p) return;
+    document.getElementById('prod-codigobarras').value = p.codigoBarras||'';
     document.getElementById('prod-ref').value     = p.ref;
     document.getElementById('prod-nombre').value  = p.nombre;
     document.getElementById('prod-pcompra').value = p.pcompra;
@@ -2613,14 +2695,14 @@ function abrirModalProducto(id, refPrellenada) {
     document.getElementById('prod-pventa2').value = p.pventa2||'';
     document.getElementById('prod-stock').value   = p.stock;
   } else {
-    ['prod-ref','prod-nombre','prod-pcompra','prod-pventa1','prod-pventa2','prod-stock'].forEach(x => document.getElementById(x).value='');
-    // Si se llega aquí desde un escaneo de un código que no existe todavía,
-    // se deja la Ref ya escrita para no tener que digitarla de nuevo.
-    if (refPrellenada) document.getElementById('prod-ref').value = refPrellenada;
+    ['prod-codigobarras','prod-ref','prod-nombre','prod-pcompra','prod-pventa1','prod-pventa2','prod-stock'].forEach(x => document.getElementById(x).value='');
+    // Si se llega aquí desde un escaneo de un código de fábrica que no
+    // existe todavía, se deja ya escrito para no tener que digitarlo.
+    if (codigoBarrasPrellenado) document.getElementById('prod-codigobarras').value = codigoBarrasPrellenado;
   }
   actualizarPcompraIva();
   abrirModal('modal-producto');
-  if (!id) setTimeout(() => document.getElementById('prod-nombre').focus(), 100);
+  if (!id) setTimeout(() => document.getElementById(codigoBarrasPrellenado ? 'prod-ref' : 'prod-codigobarras').focus(), 100);
 }
 
 // Muestra, solo como referencia (no se guarda en ningún lado), el precio de
@@ -2633,6 +2715,7 @@ function actualizarPcompraIva() {
 }
 
 async function guardarProducto() {
+  const codigoBarras=document.getElementById('prod-codigobarras').value.trim();
   const ref=document.getElementById('prod-ref').value.trim();
   const nombre=document.getElementById('prod-nombre').value.trim();
   const pcompra=parseFloat(document.getElementById('prod-pcompra').value)||0;
@@ -2647,13 +2730,20 @@ async function guardarProducto() {
   if (editandoProductoId) {
     const p = DB.productos.find(x => x.id===editandoProductoId);
     if (p) {
-      Object.assign(p,{ref,nombre,pcompra,pventa1,pventa2,stock});
+      Object.assign(p,{ref,nombre,pcompra,pventa1,pventa2,stock,codigoBarras});
+      // Columnas A-G (Ref..Stock): igual que siempre.
       await sheetsEscribir('update','Productos',[p.id,p.ref,p.nombre,p.pcompra,p.pventa1,p.pventa2,p.stock],p.id);
+      // Columna J (código de barras): en una llamada aparte, para no pisar
+      // las columnas H (alegraId) e I (unidadOK) que usa la integración
+      // con Alegra y que aquí no conocemos su valor actual.
+      await sheetsEscribir('update','Productos',[p.codigoBarras||''],p.id,10);
     }
   } else {
-    const nuevo={id:uid(),ref,nombre,pcompra,pventa1,pventa2,stock};
+    const nuevo={id:uid(),ref,nombre,pcompra,pventa1,pventa2,stock,codigoBarras};
     DB.productos.push(nuevo);
-    await sheetsEscribir('append','Productos',[nuevo.id,nuevo.ref,nuevo.nombre,nuevo.pcompra,nuevo.pventa1,nuevo.pventa2,nuevo.stock]);
+    // H y I se dejan en blanco (las llena la integración con Alegra); J es
+    // el código de barras.
+    await sheetsEscribir('append','Productos',[nuevo.id,nuevo.ref,nuevo.nombre,nuevo.pcompra,nuevo.pventa1,nuevo.pventa2,nuevo.stock,'','',nuevo.codigoBarras||'']);
   }
 
   guardarLocal(); btn.textContent='Guardar'; btn.disabled=false;
@@ -2692,7 +2782,7 @@ function buscarProductoVenta() {
   if (!q) { cont.innerHTML=''; resultadosVenta=[]; resultadosVentaTodos=[]; return; }
 
   resultadosVentaTodos = DB.productos
-    .filter(p => p.nombre.toLowerCase().includes(q)||p.ref.toLowerCase().includes(q));
+    .filter(p => productoCoincideTexto(p, q));
 
   if (resultadosVentaTodos.length===0) { cont.innerHTML='<p style="font-size:13px;color:var(--texto2);padding:8px 0">Sin resultados</p>'; resultadosVenta=[]; return; }
 
@@ -3488,23 +3578,25 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('inv-search').addEventListener('input', () => { inventarioMostrar = 10; renderInventario(); });
 
   // Lector de código de barras en Inventario: al escanear y llegar el Enter,
-  // si el código coincide EXACTO con la Ref de un producto ya existente se
-  // abre directo su ficha para editar (por ejemplo, para sumarle stock); si
-  // el código no existe todavía, se abre "Agregar producto" con la Ref ya
-  // llena, lista para escribir solo el nombre y los precios.
+  // si el código coincide EXACTO con la Ref propia o el código de barras
+  // de un producto ya existente se abre directo su ficha para editar (por
+  // ejemplo, para sumarle stock); si el código no existe todavía (un
+  // repuesto nuevo que trae código de fábrica), se abre "Agregar producto"
+  // con el código de barras ya lleno, lista solo para poner la Ref propia,
+  // el nombre y los precios.
   document.getElementById('inv-search').addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
     const q = document.getElementById('inv-search').value.trim();
     if (!q) return;
-    const coincidenciaExacta = DB.productos.find(p => p.ref.toLowerCase() === q.toLowerCase());
+    const coincidenciaExacta = DB.productos.find(p => productoCoincideExacto(p, q));
     if (coincidenciaExacta) {
       abrirModalProducto(coincidenciaExacta.id);
     } else {
       abrirModalProducto(null, q);
     }
   });
-  habilitarEnterAvanza(['prod-ref','prod-nombre','prod-pcompra','prod-pventa1','prod-pventa2','prod-stock'], guardarProducto);
+  habilitarEnterAvanza(['prod-codigobarras','prod-ref','prod-nombre','prod-pcompra','prod-pventa1','prod-pventa2','prod-stock'], guardarProducto);
 
   // Factura / boucher
   document.getElementById('btn-imprimir-boucher').addEventListener('click', () => {
@@ -3527,11 +3619,12 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
 
       // Escaneo de código de barras: el texto tecleado coincide EXACTO con
-      // la Ref de un producto → se agrega directo al carrito sin abrir
-      // modal, para poder seguir escaneando de corrido.
-      const q = ventaSearch.value.trim().toLowerCase();
+      // la Ref propia o con el código de barras de fábrica de un producto
+      // → se agrega directo al carrito sin abrir modal, para poder seguir
+      // escaneando de corrido.
+      const q = ventaSearch.value.trim();
       const coincidenciaExacta = q
-        ? DB.productos.find(p => p.ref.toLowerCase() === q)
+        ? DB.productos.find(p => productoCoincideExacto(p, q))
         : null;
 
       if (coincidenciaExacta) {
