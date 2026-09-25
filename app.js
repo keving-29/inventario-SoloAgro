@@ -476,7 +476,10 @@ async function mostrarPanelInterno(panel) {
   document.querySelector(`.nav-tab[data-tab="${panel}"]`).classList.add('active');
 
   if (panel === 'dashboard')  renderDashboard();
-  if (panel === 'inventario') renderInventario();
+  if (panel === 'inventario') {
+    renderInventario();
+    setTimeout(() => document.getElementById('inv-search').focus(), 100);
+  }
   if (panel === 'clientes')   renderClientes();
   if (panel === 'deudores')   renderDeudores();
   if (panel === 'anticipos')  renderAnticipos();
@@ -2597,7 +2600,7 @@ function renderInventario() {
   if (btnVerMas) btnVerMas.addEventListener('click', () => { inventarioMostrar += 10; renderInventario(); });
 }
 
-function abrirModalProducto(id) {
+function abrirModalProducto(id, refPrellenada) {
   editandoProductoId = id || null;
   document.getElementById('modal-prod-titulo').textContent = id ? 'Editar producto' : 'Agregar producto';
   if (id) {
@@ -2611,9 +2614,13 @@ function abrirModalProducto(id) {
     document.getElementById('prod-stock').value   = p.stock;
   } else {
     ['prod-ref','prod-nombre','prod-pcompra','prod-pventa1','prod-pventa2','prod-stock'].forEach(x => document.getElementById(x).value='');
+    // Si se llega aquí desde un escaneo de un código que no existe todavía,
+    // se deja la Ref ya escrita para no tener que digitarla de nuevo.
+    if (refPrellenada) document.getElementById('prod-ref').value = refPrellenada;
   }
   actualizarPcompraIva();
   abrirModal('modal-producto');
+  if (!id) setTimeout(() => document.getElementById('prod-nombre').focus(), 100);
 }
 
 // Muestra, solo como referencia (no se guarda en ningún lado), el precio de
@@ -2722,6 +2729,40 @@ function renderResultadosVenta() {
 
   const btnVerMas = document.getElementById('btn-ver-mas-venta');
   if (btnVerMas) btnVerMas.addEventListener('click', () => { ventaResultadosMostrar += 8; actualizarResultadosVentaVisibles(); });
+}
+
+// =============================================
+// LECTOR DE CÓDIGO DE BARRAS — VENTAS
+// =============================================
+// Un lector de código de barras USB funciona como un teclado: al escanear
+// "escribe" el código muy rápido en el campo que tenga el foco y al final
+// manda un Enter automático. Por eso no necesita ninguna configuración ni
+// librería especial: solo hay que dejar el cursor en el buscador y detectar
+// cuando lo que se tecleó coincide EXACTO con la Ref de un producto (eso
+// distingue un escaneo de una búsqueda normal por nombre, donde el usuario
+// usa las flechas para elegir). Si hay coincidencia exacta, se agrega al
+// carrito de una vez con Precio 1 y cantidad 1, sin abrir ningún modal, para
+// poder seguir escaneando el siguiente producto sin tocar el mouse.
+function agregarProductoEscaneado(p) {
+  const yaEsta = carrito.find(i => i.id===p.id && i.precio===p.pventa1);
+  if (yaEsta) {
+    yaEsta.cantidad += 1;
+    yaEsta.total = yaEsta.cantidad * yaEsta.precio;
+  } else {
+    carrito.push({
+      id: p.id, nombre: p.nombre, ref: p.ref, pcompra: p.pcompra,
+      precio: p.pventa1, pventa1: p.pventa1, pventa2: p.pventa2,
+      cantidad: 1, total: p.pventa1
+    });
+  }
+
+  renderCarrito();
+  mostrarToast(`${p.nombre} agregado (escaneado) ✓`);
+
+  document.getElementById('venta-search').value = '';
+  document.getElementById('venta-resultados').innerHTML = '';
+  resultadosVenta = []; resultadosVentaTodos = [];
+  document.getElementById('venta-search').focus();
 }
 
 // Flujo rápido: abre modal con cantidad
@@ -3445,6 +3486,24 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-guardar-producto').addEventListener('click', guardarProducto);
   document.getElementById('prod-pcompra').addEventListener('input', actualizarPcompraIva);
   document.getElementById('inv-search').addEventListener('input', () => { inventarioMostrar = 10; renderInventario(); });
+
+  // Lector de código de barras en Inventario: al escanear y llegar el Enter,
+  // si el código coincide EXACTO con la Ref de un producto ya existente se
+  // abre directo su ficha para editar (por ejemplo, para sumarle stock); si
+  // el código no existe todavía, se abre "Agregar producto" con la Ref ya
+  // llena, lista para escribir solo el nombre y los precios.
+  document.getElementById('inv-search').addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const q = document.getElementById('inv-search').value.trim();
+    if (!q) return;
+    const coincidenciaExacta = DB.productos.find(p => p.ref.toLowerCase() === q.toLowerCase());
+    if (coincidenciaExacta) {
+      abrirModalProducto(coincidenciaExacta.id);
+    } else {
+      abrirModalProducto(null, q);
+    }
+  });
   habilitarEnterAvanza(['prod-ref','prod-nombre','prod-pcompra','prod-pventa1','prod-pventa2','prod-stock'], guardarProducto);
 
   // Factura / boucher
@@ -3464,6 +3523,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const ventaSearch = document.getElementById('venta-search');
   ventaSearch.addEventListener('input', buscarProductoVenta);
   ventaSearch.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+
+      // Escaneo de código de barras: el texto tecleado coincide EXACTO con
+      // la Ref de un producto → se agrega directo al carrito sin abrir
+      // modal, para poder seguir escaneando de corrido.
+      const q = ventaSearch.value.trim().toLowerCase();
+      const coincidenciaExacta = q
+        ? DB.productos.find(p => p.ref.toLowerCase() === q)
+        : null;
+
+      if (coincidenciaExacta) {
+        agregarProductoEscaneado(coincidenciaExacta);
+        return;
+      }
+
+      // Búsqueda manual por nombre (sin coincidencia exacta de código):
+      // se usa el flujo normal con cantidad y elección de precio.
+      if (resultadosVenta.length === 0) return;
+      const p = resultadosVenta[indiceVenta];
+      if (p) abrirFlujRapido(p.id);
+      return;
+    }
+
     if (resultadosVenta.length === 0) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -3473,10 +3556,6 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       indiceVenta = Math.max(indiceVenta - 1, 0);
       renderResultadosVenta();
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const p = resultadosVenta[indiceVenta];
-      if (p) abrirFlujRapido(p.id);
     }
   });
 
