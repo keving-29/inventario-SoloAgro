@@ -3170,14 +3170,24 @@ function renderHistorial() {
   cont.querySelectorAll('.btn-eliminar-venta').forEach(b=>b.addEventListener('click',()=>eliminarVenta(b.dataset.id)));
 }
 
+// ANTES esta función borraba TODA la hoja de Ventas y la reconstruía fila
+// por fila desde lo que hubiera cargado en el navegador (DB.ventas) — si esa
+// copia local no tenía el historial completo, o el proceso se interrumpía a
+// medio camino (se cerraba la pestaña, se iba el internet), se perdía todo
+// lo demás. Así fue como se borraron las ventas del día y del mes.
+// AHORA borra solo la fila exacta de esa venta por su ID, usando la acción
+// 'delete' que el backend ya soporta — nunca toca las demás filas.
 async function eliminarVenta(id) {
   if (!confirm('¿Eliminar esta venta? El stock no se restaura.')) return;
+
+  const eliminado = await sheetsEscribir('delete','Ventas',null,id);
+  if (!eliminado) {
+    alert('NO SE PUDO ELIMINAR LA VENTA EN GOOGLE SHEETS.\n\nNo se quitó de tu pantalla para que puedas intentarlo de nuevo.');
+    return;
+  }
+
   DB.ventas=DB.ventas.filter(v=>v.id!==id);
   guardarLocal();
-  await sheetsEscribir('clear','Ventas',null,null);
-  await sheetsEscribir('append','Ventas',['ID','Fecha','Hora','Total','Ganancia','Nota','MetodoPago','Items','ClienteId','ClienteNombre','ClienteCedula','ClienteTelefono','ClienteDireccion','PagadoAhora','SaldoPendiente']);
-  for (const v of DB.ventas)
-    await sheetsEscribir('append','Ventas',[v.id,v.fecha,v.hora,v.total,v.ganancia,v.nota,v.metodoPago,JSON.stringify(v.items),v.clienteId||'',v.clienteNombre||'',v.clienteCedula||'',v.clienteTelefono||'',v.clienteDireccion||'',v.pagadoAhora!==undefined?v.pagadoAhora:'',v.saldoPendiente!==undefined?v.saldoPendiente:'']);
   renderHistorial(); renderDashboard(); mostrarToast('Venta eliminada');
 }
 
