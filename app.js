@@ -3050,10 +3050,15 @@ async function confirmarNotaCredito() {
   try {
     const ahora = new Date();
     const fechaISO = ahora.getFullYear() + '-' + String(ahora.getMonth()+1).padStart(2,'0') + '-' + String(ahora.getDate()).padStart(2,'0');
+    // Concepto exigido por la DIAN para notas crédito electrónicas:
+    // 1 = Devolución de parte de los bienes (acreditas menos de lo vendido)
+    // 2 = Anulación de factura electrónica (acreditas todo, tal cual se vendió)
+    const esTotal = notaCreditoItems.every(i => i.cantidadCredito === i.cantidad);
     const datos = {
       facturaId: v.alegraId,
       fecha: fechaISO,
       motivo,
+      tipo: esTotal ? '2' : '1',
       items: itemsCredito.map(i => ({
         alegraId: DB.productos.find(p=>p.id===i.id)?.alegraId,
         precio: i.precio,
