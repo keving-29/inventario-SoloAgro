@@ -166,7 +166,9 @@ async function sincronizar(ventasDias) {
       clienteDireccion: String(f[12]||''),
       pagadoAhora: (f[13]!==undefined&&f[13]!=='') ? Number(f[13]) : undefined,
       saldoPendiente: (f[14]!==undefined&&f[14]!=='') ? Number(f[14]) : undefined,
-      alegraId: String(f[15]||''), alegraNumero: String(f[16]||'')
+      alegraId: String(f[15]||''), alegraNumero: String(f[16]||''),
+      pagoRecibido: (f[17]!==undefined&&f[17]!=='') ? Number(f[17]) : undefined,
+      cambio: (f[18]!==undefined&&f[18]!=='') ? Number(f[18]) : undefined
     }));
   }
 
@@ -247,7 +249,7 @@ async function inicializarSheets() {
   if (!datos.Productos || datos.Productos.length === 0)
     await sheetsEscribir('append', 'Productos', ['ID','Ref','Nombre','PCompra','PVenta1','PVenta2','Stock']);
   if (!datos.Ventas || datos.Ventas.length === 0)
-    await sheetsEscribir('append', 'Ventas', ['ID','Fecha','Hora','Total','Ganancia','Nota','MetodoPago','Items','ClienteId','ClienteNombre','ClienteCedula','ClienteTelefono','ClienteDireccion','PagadoAhora','SaldoPendiente']);
+    await sheetsEscribir('append', 'Ventas', ['ID','Fecha','Hora','Total','Ganancia','Nota','MetodoPago','Items','ClienteId','ClienteNombre','ClienteCedula','ClienteTelefono','ClienteDireccion','PagadoAhora','SaldoPendiente','AlegraId','AlegraNumero','PagoRecibido','Cambio']);
   if (!datos.Usuarios || datos.Usuarios.length === 0) {
     await sheetsEscribir('append', 'Usuarios', ['Usuario','Contraseña','Rol']);
     await sheetsEscribir('append', 'Usuarios', ['admin','Soloagro2812','admin']);
@@ -2344,6 +2346,13 @@ function construirTicketVentaPOS(venta) {
     t += 'FALTA POR CANCELAR:'.padEnd(POS_ANCHO - 12) + fmt(venta.saldoPendiente).padStart(12) + '\n';
   }
 
+  if (venta.pagoRecibido !== undefined) {
+    t += 'PAGO RECIBIDO:'.padEnd(POS_ANCHO - 12) + fmt(venta.pagoRecibido).padStart(12) + '\n';
+    t += POS_NEGRITA_ON;
+    t += 'CAMBIO:'.padEnd(POS_ANCHO - 12) + fmt(venta.cambio||0).padStart(12) + '\n';
+    t += POS_NEGRITA_OFF;
+  }
+
   t += posLinea();
   t += 'Valor en letras:\n';
   posWrap(numeroALetras(venta.total), POS_ANCHO).forEach(l => { t += l + '\n'; });
@@ -2452,6 +2461,13 @@ function abrirFactura(venta) {
       <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:600;color:#A32D2D;margin-top:6px">
         <span>Falta por cancelar</span><span>${fmt(venta.saldoPendiente)}</span>
       </div>`:''}
+      ${venta.pagoRecibido!==undefined?`
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--texto2);margin-top:6px">
+        <span>Pago recibido</span><span>${fmt(venta.pagoRecibido)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:600;color:var(--rosa-oscuro);margin-top:4px">
+        <span>Cambio</span><span>${fmt(venta.cambio||0)}</span>
+      </div>`:''}
     </div>
     <div style="text-align:center;margin-top:1.5rem;padding-top:1rem;border-top:0.5px solid var(--borde);font-size:12px;color:var(--texto3)">¡Gracias por tu compra! 🌸</div>
   `;
@@ -2497,6 +2513,9 @@ function imprimirBoucherHTML(venta) {
     </table>
     <p style="margin-top:12px;font-size:14px;text-align:right"><strong>${venta.saldoPendiente!==undefined?'Pagado ahora':'Total'}: ${fmt(venta.total)}</strong></p>
     ${venta.saldoPendiente!==undefined?`<p style="margin-top:4px;font-size:14px;text-align:right;color:#A32D2D"><strong>Falta por cancelar: ${fmt(venta.saldoPendiente)}</strong></p>`:''}
+    ${venta.pagoRecibido!==undefined?`
+    <p style="margin-top:4px;font-size:13px;text-align:right">Pago recibido: ${fmt(venta.pagoRecibido)}</p>
+    <p style="margin-top:2px;font-size:14px;text-align:right"><strong>Cambio: ${fmt(venta.cambio||0)}</strong></p>`:''}
     <p style="margin-top:4px;font-size:12px;text-align:right">Método de pago: ${metodoTexto}</p>
     <p style="text-align:center;margin-top:20px;font-size:12px">¡Gracias por tu compra!</p>
   `;
@@ -3010,8 +3029,95 @@ function aplicarPrecioCustom() {
   cerrarModal('modal-precio'); renderCarrito();
 }
 
-async function confirmarVenta() {
+function confirmarVenta() {
   if (carrito.length===0) return;
+  const total=carrito.reduce((a,i)=>a+i.total,0);
+  const metodoPago=document.querySelector('input[name="metodo-pago"]:checked').value;
+
+  if (metodoPago === 'mixto') {
+    const efectivo = parseFloat(document.getElementById('pago-mixto-efectivo').value)||0;
+    const transferencia = parseFloat(document.getElementById('pago-mixto-transferencia').value)||0;
+    if (Math.round(efectivo+transferencia) !== Math.round(total)) {
+      alert('El pago mixto no cuadra con el total de la venta.');
+      return;
+    }
+  }
+
+  if (metodoPago === 'efectivo') {
+    abrirModalPagoEfectivo(total);
+  } else {
+    finalizarVenta(null);
+  }
+}
+
+let pagoEfectivoTotalActual = 0;
+
+// Genera los montos de "pago rápido" a partir del total. Redondea hacia
+// arriba a billetes de 5.000, 10.000, 20.000, 50.000 y 100.000 — así sirve
+// igual para una venta chica de $11.500 (opciones 15.000/20.000/50.000) que
+// para una venta grande de $350.000 (opciones 350.000/400.000, pensando en
+// que paguen con billetes de $50.000 o $100.000).
+function calcularOpcionesRapidasPago(total) {
+  const candidatos = [
+    total,
+    Math.ceil(total/5000)*5000,
+    Math.ceil(total/10000)*10000,
+    Math.ceil(total/20000)*20000,
+    Math.ceil(total/50000)*50000,
+    Math.ceil(total/100000)*100000
+  ];
+  const vistos = new Set();
+  const opciones = [];
+  candidatos.forEach(v => { if (v>0 && !vistos.has(v)) { vistos.add(v); opciones.push(v); } });
+  opciones.sort((a,b)=>a-b);
+  return opciones.slice(0,6);
+}
+
+function abrirModalPagoEfectivo(total) {
+  pagoEfectivoTotalActual = total;
+  document.getElementById('pef-total').textContent = fmt(total);
+  const input = document.getElementById('pef-recibido');
+  input.value = total;
+  renderOpcionesRapidasPago(total);
+  actualizarCambioPago();
+  abrirModal('modal-pago-efectivo');
+  setTimeout(() => { input.focus(); input.select(); }, 100);
+}
+
+function renderOpcionesRapidasPago(total) {
+  const opciones = calcularOpcionesRapidasPago(total);
+  const cont = document.getElementById('pef-opciones-rapidas');
+  cont.innerHTML = opciones.map(v => `<button type="button" class="pef-opcion-rapida" data-valor="${v}">${fmt(v)}</button>`).join('');
+  cont.querySelectorAll('.pef-opcion-rapida').forEach(b => {
+    b.addEventListener('click', () => {
+      document.getElementById('pef-recibido').value = b.dataset.valor;
+      actualizarCambioPago();
+    });
+  });
+}
+
+function actualizarCambioPago() {
+  const recibido = parseFloat(document.getElementById('pef-recibido').value)||0;
+  const cambio = recibido - pagoEfectivoTotalActual;
+  const elCambio = document.getElementById('pef-cambio');
+  elCambio.textContent = fmt(Math.max(0,cambio));
+  elCambio.classList.toggle('negativo', cambio < 0);
+  const btn = document.getElementById('btn-pef-continuar');
+  if (btn) btn.disabled = cambio < 0;
+
+  document.querySelectorAll('.pef-opcion-rapida').forEach(b => {
+    b.classList.toggle('activa', Number(b.dataset.valor) === recibido);
+  });
+}
+
+function confirmarPagoEfectivo() {
+  const recibido = parseFloat(document.getElementById('pef-recibido').value)||0;
+  if (recibido < pagoEfectivoTotalActual) { alert('El valor recibido no puede ser menor al total de la venta.'); return; }
+  cerrarModal('modal-pago-efectivo');
+  finalizarVenta(recibido);
+}
+
+async function finalizarVenta(pagoEfectivoRecibido) {
   const ahora=new Date();
   const fecha=fechaCO(ahora);
   const hora=horaCO(ahora);
@@ -3020,15 +3126,12 @@ async function confirmarVenta() {
   const nota=document.getElementById('venta-nota').value.trim();
   const metodoPago=document.querySelector('input[name="metodo-pago"]:checked').value;
   const tipoDocumento=document.querySelector('input[name="tipo-documento"]:checked').value;
+  const cambio = pagoEfectivoRecibido!=null ? Math.max(0, pagoEfectivoRecibido-total) : undefined;
 
   let pagos = [];
   if (metodoPago === 'mixto') {
     const efectivo = parseFloat(document.getElementById('pago-mixto-efectivo').value)||0;
     const transferencia = parseFloat(document.getElementById('pago-mixto-transferencia').value)||0;
-    if (Math.round(efectivo+transferencia) !== Math.round(total)) {
-      alert('El pago mixto no cuadra con el total de la venta.');
-      return;
-    }
     if (efectivo>0) pagos.push({metodo:'efectivo', monto:efectivo});
     if (transferencia>0) pagos.push({metodo:'transferencia', monto:transferencia});
   } else {
@@ -3051,10 +3154,11 @@ async function confirmarVenta() {
     clienteId: clienteVenta?clienteVenta.id:'', clienteNombre: clienteVenta?clienteVenta.nombre:'',
     clienteCedula: clienteVenta?clienteVenta.cedula:'', clienteTelefono: clienteVenta?clienteVenta.telefono:'',
     clienteDireccion: clienteVenta?clienteVenta.direccion:'',
-    alegraId: '', alegraNumero: ''
+    alegraId: '', alegraNumero: '',
+    pagoRecibido: pagoEfectivoRecibido!=null?pagoEfectivoRecibido:undefined, cambio
   };
   DB.ventas.push(venta);
-  await sheetsEscribir('append','Ventas',[venta.id,venta.fecha,venta.hora,venta.total,venta.ganancia,venta.nota,venta.metodoPago,JSON.stringify(venta.items),venta.clienteId,venta.clienteNombre,venta.clienteCedula,venta.clienteTelefono,venta.clienteDireccion,'','','','']);
+  await sheetsEscribir('append','Ventas',[venta.id,venta.fecha,venta.hora,venta.total,venta.ganancia,venta.nota,venta.metodoPago,JSON.stringify(venta.items),venta.clienteId,venta.clienteNombre,venta.clienteCedula,venta.clienteTelefono,venta.clienteDireccion,'','','','',venta.pagoRecibido!=null?venta.pagoRecibido:'',venta.cambio!=null?venta.cambio:'']);
 
   guardarLocal();
   mostrarToast(`Venta registrada · ${metodoPago==='transferencia'?'🏦':metodoPago==='mixto'?'🔀':'💵'} ${fmt(total)}`);
@@ -3654,6 +3758,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-limpiar-carrito').addEventListener('click',()=>{ carrito=[]; renderCarrito(); });
   document.getElementById('btn-confirmar-venta').addEventListener('click', confirmarVenta);
+  document.getElementById('pef-recibido').addEventListener('input', actualizarCambioPago);
+  document.getElementById('btn-pef-continuar').addEventListener('click', confirmarPagoEfectivo);
 
   document.querySelectorAll('input[name="metodo-pago"]').forEach(radio => {
     radio.addEventListener('change', () => {

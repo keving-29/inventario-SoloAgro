@@ -387,6 +387,37 @@ input:focus, select:focus { border-color: var(--rosa-medio); background: var(--c
   cursor: pointer;
 }
 
+.pef-opcion-rapida {
+  padding: 10px 16px;
+  border: 1.5px solid var(--borde);
+  background: var(--card);
+  color: var(--rosa-oscuro);
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.pef-opcion-rapida:hover {
+  border-color: var(--rosa-medio);
+  background: var(--rosa-claro);
+}
+
+.pef-opcion-rapida.activa {
+  background: var(--rosa);
+  border-color: var(--rosa);
+  color: #fff;
+}
+
+#pef-cambio {
+  color: var(--rosa-oscuro);
+}
+
+#pef-cambio.negativo {
+  color: #A32D2D;
+}
+
 /* CARRITO */
 .carrito-item {
   display: flex;
