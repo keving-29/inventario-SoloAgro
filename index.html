@@ -39,6 +39,7 @@
           <button class="nav-tab" data-tab="ventas"><i class="ti ti-shopping-bag"></i> Vender</button>
           <button class="nav-tab" data-tab="clientes"><i class="ti ti-address-book"></i> Clientes</button>
           <button class="nav-tab" data-tab="cotizacion"><i class="ti ti-file-invoice"></i> Cotización</button>
+          <button class="nav-tab" data-tab="cotizacionmayor"><i class="ti ti-packages"></i> Cotiz. mayorista</button>
           <button class="nav-tab" data-tab="traslado"><i class="ti ti-truck"></i> Traslado</button>
           <button class="nav-tab" data-tab="deudores"><i class="ti ti-users"></i> Deudores</button>
           <button class="nav-tab" data-tab="anticipos"><i class="ti ti-cash-banknote"></i> Anticipos</button>
@@ -247,6 +248,42 @@
           </div>
 
           <div id="cotizacion-contenido"></div>
+        </div>
+      </section>
+
+      <!-- COTIZACIÓN AL POR MAYOR (no afecta inventario ni se registra como venta) -->
+      <section id="panel-cotizacionmayor" class="panel">
+        <div class="card">
+          <div class="section-header">
+            <h2>Cotización al por mayor</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn-secundario" id="btn-imprimir-cotmayor"><i class="ti ti-printer"></i> Imprimir cotización</button>
+              <button class="btn-peligro" id="btn-limpiar-cotmayor">Limpiar</button>
+            </div>
+          </div>
+          <p style="font-size:12px;color:var(--texto2);margin-bottom:1rem">Muestra cada producto a precio normal y a precio mayorista, con el total mayorista y el ahorro del cliente. No descuenta stock ni se registra como venta.</p>
+
+          <p style="font-size:11px;color:var(--texto2);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Cliente registrado (opcional)</p>
+          <div id="cotmayor-cliente-busqueda-box">
+            <input type="text" id="cotmayor-cliente-buscar" placeholder="Buscar cliente por nombre o cédula...">
+            <div id="cotmayor-cliente-resultados"></div>
+          </div>
+          <div id="cotmayor-cliente-seleccionado" class="producto-seleccionado-box hidden">
+            <div class="producto-seleccionado-info">
+              <strong id="cotmayor-cliente-nombre"></strong>
+              <span id="cotmayor-cliente-detalle"></span>
+            </div>
+            <button type="button" class="btn-peligro" id="btn-quitar-cliente-cotmayor" style="padding:6px 10px"><i class="ti ti-x"></i></button>
+          </div>
+
+          <input type="text" id="cotmayor-cliente" placeholder="O escribe el nombre (si el cliente no está registrado)" style="margin-bottom:1rem">
+
+          <div id="cotmayor-busqueda-box">
+            <input type="text" id="cotmayor-search" placeholder="Buscar producto y presiona Enter...">
+            <div id="cotmayor-resultados"></div>
+          </div>
+
+          <div id="cotmayor-contenido"></div>
         </div>
       </section>
 
@@ -736,6 +773,23 @@
       <p style="font-size:13px;color:var(--texto2);margin:10px 0 6px">Precio unitario</p>
       <input type="number" id="cq-precio" min="0">
       <button class="btn-primary" id="btn-cq-agregar" style="width:100%;margin-top:10px">Agregar a la cotización</button>
+    </div>
+  </div>
+
+  <!-- MODAL: cantidad y precios al agregar producto a la cotización al por mayor -->
+  <div id="modal-cantidad-cotizacion-mayor" class="modal-bg hidden">
+    <div class="modal" style="max-width:360px">
+      <div class="modal-header">
+        <h3 id="cqm-nombre" style="font-size:16px"></h3>
+        <button class="btn-cerrar-modal" data-modal="modal-cantidad-cotizacion-mayor">✕</button>
+      </div>
+      <p style="font-size:13px;color:var(--texto2);margin-bottom:6px">Cantidad</p>
+      <input type="number" id="cqm-cantidad" min="1" value="1">
+      <p style="font-size:13px;color:var(--texto2);margin:10px 0 6px">Precio normal (unitario)</p>
+      <input type="number" id="cqm-precio-normal" min="0">
+      <p style="font-size:13px;color:var(--texto2);margin:10px 0 6px">Precio mayorista (unitario)</p>
+      <input type="number" id="cqm-precio-mayor" min="0">
+      <button class="btn-primary" id="btn-cqm-agregar" style="width:100%;margin-top:10px">Agregar a la cotización</button>
     </div>
   </div>
 

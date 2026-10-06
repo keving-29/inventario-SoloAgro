@@ -64,6 +64,11 @@ const VENTAS_DIAS_SYNC_LIGERO = 120;
 const buscadoresCliente = {};
 let clienteVenta = null;
 let clienteCotizacion = null;
+let cotizacionMayor = [];
+let cotizacionMayorProductoActual = null;
+let resultadosCotizacionMayor = [];
+let indiceCotizacionMayor = 0;
+let clienteCotizacionMayor = null;
 let clienteDeudor = null;
 let clienteAnticipo = null;
 let clienteModalContexto = null;
@@ -538,6 +543,13 @@ async function mostrarPanelInterno(panel) {
     resultadosTraslado = [];
     setTimeout(() => document.getElementById('traslado-search').focus(), 100);
   }
+  if (panel === 'cotizacionmayor') {
+    renderCotizacionMayor();
+    document.getElementById('cotmayor-search').value = '';
+    document.getElementById('cotmayor-resultados').innerHTML = '';
+    resultadosCotizacionMayor = [];
+    setTimeout(() => document.getElementById('cotmayor-search').focus(), 100);
+  }
   if (panel === 'cotizacion') {
     renderCotizacion();
     document.getElementById('cotizacion-search').value = '';
@@ -935,6 +947,210 @@ function limpiarCotizacion() {
   document.getElementById('cot-cliente').value = '';
   quitarClienteCotizacion();
   renderCotizacion();
+}
+
+// =============================================
+// COTIZACIÓN AL POR MAYOR (no afecta stock ni se registra como venta; no se
+// guarda en Google Sheets). Cada línea muestra el precio normal (precio de
+// venta 1) y el precio mayorista, con el total a ambos precios y el ahorro.
+// =============================================
+function buscarProductoCotizacionMayor() {
+  const q = document.getElementById('cotmayor-search').value.toLowerCase();
+  const cont = document.getElementById('cotmayor-resultados');
+  indiceCotizacionMayor = 0;
+  if (!q) { cont.innerHTML=''; resultadosCotizacionMayor=[]; return; }
+
+  resultadosCotizacionMayor = DB.productos
+    .filter(p => productoCoincideTexto(p, q))
+    .slice(0,8);
+
+  if (resultadosCotizacionMayor.length===0) { cont.innerHTML='<p style="font-size:13px;color:var(--texto2);padding:8px 0">Sin resultados</p>'; return; }
+
+  renderResultadosCotizacionMayor();
+}
+
+function renderResultadosCotizacionMayor() {
+  const cont = document.getElementById('cotmayor-resultados');
+  cont.innerHTML = `
+    <div style="background:var(--card);border:0.5px solid var(--borde);border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:var(--sombra)">
+      <div style="padding:8px 12px;background:var(--blush-claro);border-bottom:0.5px solid var(--borde);font-size:11px;color:var(--texto2);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">
+        Resultados — ↑↓ para navegar, Enter para agregar
+      </div>
+      ${resultadosCotizacionMayor.map((p,i) => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:0.5px solid var(--borde);flex-wrap:wrap;gap:8px;${i===indiceCotizacionMayor?'background:var(--rosa-claro)':''}">
+          <div>
+            ${i===indiceCotizacionMayor?'<span style="font-size:10px;background:var(--rosa);color:#fff;padding:2px 7px;border-radius:10px;margin-right:6px">↵ Enter</span>':''}
+            <span style="font-size:14px;font-weight:500">${esc(p.nombre)}</span>
+            <div style="font-size:12px;color:var(--texto2)">Código: ${esc(p.ref)} · P1: ${fmt(p.pventa1)}${p.pventa2>0?' · P2: '+fmt(p.pventa2):''}</div>
+          </div>
+          <button class="btn-primary btn-agregar-cotmayor" data-id="${p.id}" style="flex-shrink:0"><i class="ti ti-plus"></i> Agregar</button>
+        </div>`).join('')}
+    </div>`;
+
+  cont.querySelectorAll('.btn-agregar-cotmayor').forEach(b =>
+    b.addEventListener('click', () => agregarACotizacionMayor(b.dataset.id)));
+}
+
+function agregarACotizacionMayor(id) {
+  const p = DB.productos.find(x => x.id===id);
+  if (!p) return;
+  cotizacionMayorProductoActual = p;
+  document.getElementById('cqm-nombre').textContent = p.nombre;
+  document.getElementById('cqm-cantidad').value = '1';
+  document.getElementById('cqm-precio-normal').value = p.pventa1;
+  // Sugerencia: el precio de venta 2 (especial). Se puede cambiar a mano.
+  document.getElementById('cqm-precio-mayor').value = p.pventa2>0 ? p.pventa2 : p.pventa1;
+  abrirModal('modal-cantidad-cotizacion-mayor');
+  setTimeout(() => document.getElementById('cqm-cantidad').focus(), 100);
+
+  document.getElementById('cotmayor-search').value = '';
+  document.getElementById('cotmayor-resultados').innerHTML = '';
+}
+
+function confirmarCantidadCotizacionMayor() {
+  const cant = parseInt(document.getElementById('cqm-cantidad').value) || 0;
+  const precioNormal = parseFloat(document.getElementById('cqm-precio-normal').value) || 0;
+  const precioMayor = parseFloat(document.getElementById('cqm-precio-mayor').value) || 0;
+  if (cant < 1) { alert('Ingresa una cantidad válida'); return; }
+  if (precioNormal <= 0) { alert('Ingresa un precio normal válido'); return; }
+  if (precioMayor <= 0) { alert('Ingresa un precio mayorista válido'); return; }
+  const p = cotizacionMayorProductoActual;
+  if (!p) return;
+
+  cotizacionMayor.push({ itemId: uid(), codigo: p.ref, nombre: p.nombre, cantidad: cant, precioNormal, precioMayor });
+  cerrarModal('modal-cantidad-cotizacion-mayor');
+  renderCotizacionMayor();
+  document.getElementById('cotmayor-search').focus();
+  mostrarToast('Producto agregado a la cotización mayorista ✓');
+}
+
+function eliminarDeCotizacionMayor(itemId) {
+  cotizacionMayor = cotizacionMayor.filter(i => i.itemId !== itemId);
+  renderCotizacionMayor();
+}
+
+function totalesCotizacionMayor(items) {
+  const totalNormal = items.reduce((acc,i) => acc + i.cantidad*i.precioNormal, 0);
+  const totalMayor = items.reduce((acc,i) => acc + i.cantidad*i.precioMayor, 0);
+  return { totalNormal, totalMayor, ahorro: totalNormal - totalMayor };
+}
+
+function renderCotizacionMayor() {
+  const cont = document.getElementById('cotmayor-contenido');
+  if (cotizacionMayor.length === 0) {
+    cont.innerHTML = `<div class="estado-vacio"><i class="ti ti-file-invoice"></i><p>Sin productos en la cotización al por mayor.</p></div>`;
+    return;
+  }
+
+  const { totalNormal, totalMayor, ahorro } = totalesCotizacionMayor(cotizacionMayor);
+
+  const filas = cotizacionMayor.map((i, idx) => `
+    <tr>
+      <td>${idx+1}</td>
+      <td><code style="background:var(--blush-claro);padding:2px 7px;border-radius:4px;font-size:12px">${esc(i.codigo)}</code></td>
+      <td>${esc(i.nombre)}</td>
+      <td style="text-align:center">${i.cantidad}</td>
+      <td>${fmt(i.precioNormal)}</td>
+      <td>${fmt(i.cantidad*i.precioNormal)}</td>
+      <td style="font-weight:600;color:var(--rosa-oscuro)">${fmt(i.precioMayor)}</td>
+      <td style="font-weight:600;color:var(--rosa-oscuro)">${fmt(i.cantidad*i.precioMayor)}</td>
+      <td><button class="btn-peligro btn-quitar-cotmayor" data-id="${i.itemId}" style="padding:5px 9px"><i class="ti ti-trash"></i></button></td>
+    </tr>`).join('');
+
+  cont.innerHTML = `
+    <div class="tabla-wrap"><table>
+    <thead><tr><th>#</th><th>Código</th><th>Nombre</th><th>Cant.</th><th>Precio normal</th><th>Total normal</th><th>Precio mayorista</th><th>Total mayorista</th><th></th></tr></thead>
+    <tbody>${filas}</tbody></table></div>
+    <div style="margin-top:14px;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;color:var(--texto2)">
+      <span>Total a precio normal</span>
+      <span style="font-weight:600">${fmt(totalNormal)}</span>
+    </div>
+    <div style="padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;color:var(--texto2)">
+      <span>Ahorro del cliente</span>
+      <span style="font-weight:600">${fmt(ahorro)}</span>
+    </div>
+    <div style="margin-top:6px;padding:12px 16px;background:var(--rosa-claro);border-radius:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <span style="color:var(--rosa-oscuro);font-weight:500">Total mayorista</span>
+      <span style="font-size:20px;font-weight:700">${fmt(totalMayor)}</span>
+    </div>`;
+
+  cont.querySelectorAll('.btn-quitar-cotmayor').forEach(b =>
+    b.addEventListener('click', () => eliminarDeCotizacionMayor(b.dataset.id)));
+}
+
+function construirHtmlCotizacionMayorPrint(fecha, cliente, items) {
+  const { totalNormal, totalMayor, ahorro } = totalesCotizacionMayor(items);
+  const filas = items.map((i, idx) => `
+    <tr>
+      <td>${idx+1}</td>
+      <td>${esc(i.codigo)}</td>
+      <td>${esc(i.nombre)}</td>
+      <td style="text-align:center">${i.cantidad}</td>
+      <td>${fmt(i.precioNormal)}</td>
+      <td>${fmt(i.cantidad*i.precioNormal)}</td>
+      <td><strong>${fmt(i.precioMayor)}</strong></td>
+      <td><strong>${fmt(i.cantidad*i.precioMayor)}</strong></td>
+    </tr>`).join('');
+
+  const nombreCliente = (cliente && cliente.nombre) ? cliente.nombre : 'Consumidor final';
+
+  return `
+    <div id="tp-header">
+      <h1>Multirepuestos SoloAgro</h1>
+      <p>CR 5 #5-42 Barrio Obrero · Tel: 3142238531 · lubinpabongomez@gmail.com</p>
+      <p style="font-weight:600;margin-top:4px">Cotización al por mayor</p>
+    </div>
+    <div id="tp-meta">
+      <span><strong>Fecha:</strong> ${fecha}</span>
+      <span><strong>Cliente:</strong> ${esc(nombreCliente)}</span>
+    </div>
+    ${cliente && cliente.cedula ? `<p style="font-size:13px;margin-bottom:4px"><strong>${esc(cliente.tipoDoc||'CC')}:</strong> ${esc(cliente.cedula)}</p>` : ''}
+    ${cliente && cliente.telefono ? `<p style="font-size:13px;margin-bottom:4px"><strong>Teléfono:</strong> ${esc(cliente.telefono)}</p>` : ''}
+    ${cliente && cliente.direccion ? `<p style="font-size:13px;margin-bottom:4px"><strong>Dirección:</strong> ${esc(cliente.direccion)}</p>` : ''}
+    <table>
+      <thead><tr><th>#</th><th>Código</th><th>Producto</th><th>Cant.</th><th>Precio normal</th><th>Total normal</th><th>Precio mayorista</th><th>Total mayorista</th></tr></thead>
+      <tbody>${filas}</tbody>
+    </table>
+    <p style="margin-top:12px;font-size:13px;text-align:right">Total a precio normal: ${fmt(totalNormal)}</p>
+    <p style="margin-top:2px;font-size:13px;text-align:right">Ahorro: ${fmt(ahorro)}</p>
+    <p style="margin-top:6px;font-size:15px;text-align:right"><strong>TOTAL MAYORISTA: ${fmt(totalMayor)}</strong></p>
+    <p style="margin-top:20px;font-size:12px;color:#444">Esta cotización es informativa y no constituye una factura de venta. Precios sujetos a cambio sin previo aviso.</p>
+  `;
+}
+
+function imprimirCotizacionMayor() {
+  if (cotizacionMayor.length === 0) { alert('Agrega productos a la cotización antes de imprimir'); return; }
+  const nombreLibre = document.getElementById('cotmayor-cliente').value.trim();
+  const fecha = fechaCO(new Date());
+
+  const clienteInfo = clienteCotizacionMayor || (nombreLibre ? { nombre: nombreLibre } : null);
+
+  document.getElementById('cotizacion-print-contenido').innerHTML = construirHtmlCotizacionMayorPrint(fecha, clienteInfo, cotizacionMayor);
+  prepararImpresion('cotizacion-print');
+  window.print();
+}
+
+function limpiarCotizacionMayor() {
+  if (cotizacionMayor.length === 0) return;
+  if (!confirm('¿Vaciar la cotización al por mayor actual?')) return;
+  cotizacionMayor = [];
+  document.getElementById('cotmayor-cliente').value = '';
+  quitarClienteCotizacionMayor();
+  renderCotizacionMayor();
+}
+
+function seleccionarClienteCotizacionMayor(c) {
+  clienteCotizacionMayor = c;
+  document.getElementById('cotmayor-cliente-nombre').textContent = c.nombre;
+  document.getElementById('cotmayor-cliente-detalle').textContent = `${c.tipoDoc||'CC'} ${c.cedula}${c.telefono?' · Tel: '+c.telefono:''}`;
+  document.getElementById('cotmayor-cliente-seleccionado').classList.remove('hidden');
+  document.getElementById('cotmayor-cliente-buscar').value = '';
+  document.getElementById('cotmayor-cliente-resultados').innerHTML = '';
+}
+
+function quitarClienteCotizacionMayor() {
+  clienteCotizacionMayor = null;
+  document.getElementById('cotmayor-cliente-seleccionado').classList.add('hidden');
 }
 
 // =============================================
@@ -3862,6 +4078,32 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-limpiar-cotizacion').addEventListener('click', limpiarCotizacion);
   document.getElementById('btn-imprimir-cotizacion').addEventListener('click', imprimirCotizacion);
   document.getElementById('btn-cq-agregar').addEventListener('click', confirmarCantidadCotizacion);
+
+  // Cotización al por mayor
+  const cotMayorSearch = document.getElementById('cotmayor-search');
+  inicializarBuscadorCliente('cotizacionmayor', 'cotmayor-cliente-buscar', 'cotmayor-cliente-resultados', seleccionarClienteCotizacionMayor);
+  document.getElementById('btn-quitar-cliente-cotmayor').addEventListener('click', quitarClienteCotizacionMayor);
+  cotMayorSearch.addEventListener('input', buscarProductoCotizacionMayor);
+  cotMayorSearch.addEventListener('keydown', e => {
+    if (resultadosCotizacionMayor.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      indiceCotizacionMayor = Math.min(indiceCotizacionMayor + 1, resultadosCotizacionMayor.length - 1);
+      renderResultadosCotizacionMayor();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      indiceCotizacionMayor = Math.max(indiceCotizacionMayor - 1, 0);
+      renderResultadosCotizacionMayor();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const p = resultadosCotizacionMayor[indiceCotizacionMayor];
+      if (p) agregarACotizacionMayor(p.id);
+    }
+  });
+  document.getElementById('btn-limpiar-cotmayor').addEventListener('click', limpiarCotizacionMayor);
+  document.getElementById('btn-imprimir-cotmayor').addEventListener('click', imprimirCotizacionMayor);
+  document.getElementById('btn-cqm-agregar').addEventListener('click', confirmarCantidadCotizacionMayor);
+  document.getElementById('cqm-precio-mayor').addEventListener('keydown', e => { if (e.key==='Enter') confirmarCantidadCotizacionMayor(); });
   document.getElementById('cq-precio').addEventListener('keydown', e => { if (e.key==='Enter') confirmarCantidadCotizacion(); });
 
   // Clientes
