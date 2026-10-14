@@ -763,7 +763,7 @@ function construirHtmlTrasladoPrint(numero, fecha, hora, items, extra) {
         <tfoot><tr><td colspan="3" class="tpd-der"><strong>Totales (${items.length} productos)</strong></td><td class="tpd-der"><strong>${unidades}</strong></td><td class="tpd-der"><strong>${fmt(total)}</strong></td></tr></tfoot>
       </table>
 
-      <div class="tpd-obs"><strong>OBSERVACIONES</strong>${extra.observaciones ? ' ' + esc(extra.observaciones) : ''}</div>
+      <div class="tpd-obs"><strong>OBSERVACIONES</strong>${extra.observaciones ? `<div class="tpd-obs-texto">${esc(extra.observaciones)}</div>` : ''}</div>
 
       <div class="tpd-pie">
         <div class="tpd-firmas">

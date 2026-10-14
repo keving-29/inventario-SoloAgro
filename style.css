@@ -328,6 +328,7 @@ input[type="text"],
 input[type="number"],
 input[type="password"],
 input[type="date"],
+textarea,
 select {
   padding: 10px 14px;
   border: 0.5px solid var(--borde);
@@ -340,7 +341,8 @@ select {
   width: 100%;
   margin-bottom: 10px;
 }
-input:focus, select:focus { border-color: var(--rosa-medio); background: var(--card); }
+textarea { resize: vertical; min-height: 80px; line-height: 1.4; }
+input:focus, select:focus, textarea:focus { border-color: var(--rosa-medio); background: var(--card); }
 
 #inv-search, #venta-search { border-radius: 20px; margin-bottom: 1rem; }
 
@@ -575,6 +577,7 @@ input:focus, select:focus { border-color: var(--rosa-medio); background: var(--c
   input[type="number"],
   input[type="password"],
   input[type="date"],
+  textarea,
   select {
     font-size: 16px;
   }
@@ -694,6 +697,7 @@ input:focus, select:focus { border-color: var(--rosa-medio); background: var(--c
 #traslado-print .tpd-tabla tfoot td { border-top: 1px solid #000; border-bottom: none; }
 #traslado-print .tpd-der { text-align: right; }
 .tpd-obs { margin-top: 8px; font-size: 11px; }
+.tpd-obs-texto { white-space: pre-wrap; margin-top: 2px; }
 .tpd-pie { margin-top: auto; }
 .tpd-firmas { display: flex; border: 1px solid #000; height: 110px; }
 .tpd-firma { flex: 1; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; font-weight: 600; font-size: 11px; }
