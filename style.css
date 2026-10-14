@@ -674,6 +674,36 @@ input:focus, select:focus { border-color: var(--rosa-medio); background: var(--c
 /* IMPRESIÓN DE TRASLADO Y BOUCHER */
 #traslado-print, #venta-print, #deudor-print, #proveedor-print, #cotizacion-print { display: none; }
 
+/* TRASLADO — formato tipo documento con marco */
+#traslado-print.activo { padding: 0; }
+.tpd-pagina { border: 1px solid #000; min-height: 250mm; display: flex; flex-direction: column; padding: 10px 12px; font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000; }
+.tpd-cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
+.tpd-empresa { flex: 1; text-align: center; line-height: 1.35; }
+.tpd-empresa strong { display: block; font-size: 14px; }
+.tpd-empresa span { display: block; font-size: 12px; }
+.tpd-numero { width: 150px; border: 1px solid #000; border-radius: 4px; padding: 10px; text-align: center; }
+.tpd-numero span { display: block; font-size: 10px; margin-bottom: 4px; }
+.tpd-numero strong { font-size: 13px; }
+.tpd-cajas { display: flex; gap: 10px; margin-bottom: 12px; }
+#traslado-print .tpd-caja { flex: 1; width: auto; border: 1px solid #000; border-collapse: collapse; font-size: 11px; }
+#traslado-print .tpd-caja th { width: 32%; background: #e6e6e6; text-align: left; border: none; padding: 2px 6px; font-weight: 600; }
+#traslado-print .tpd-caja td { border: none; padding: 2px 6px; background: #fff; }
+#traslado-print .tpd-tabla { width: 100%; border-collapse: collapse; font-size: 11px; }
+#traslado-print .tpd-tabla th { background: #e6e6e6; border: 1px solid #000; padding: 3px 6px; text-align: center; font-weight: 600; }
+#traslado-print .tpd-tabla td { border: none; border-bottom: 1px solid #ccc; padding: 3px 6px; }
+#traslado-print .tpd-tabla tfoot td { border-top: 1px solid #000; border-bottom: none; }
+#traslado-print .tpd-der { text-align: right; }
+.tpd-obs { margin-top: 8px; font-size: 11px; }
+.tpd-pie { margin-top: auto; }
+.tpd-firmas { display: flex; border: 1px solid #000; height: 110px; }
+.tpd-firma { flex: 1; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; font-weight: 600; font-size: 11px; }
+.tpd-firma + .tpd-firma { border-left: 1px solid #000; }
+.tpd-pag { text-align: right; font-weight: 600; margin-top: 4px; font-size: 10px; }
+#traslado-print .tpd-caja th, #traslado-print .tpd-tabla th { text-transform: none; color: #000; letter-spacing: 0; font-size: 11px; }
+.tpd-pagina { background: #fff; }
+@media print { body { background: #fff !important; } }
+@page { margin: 8mm; }
+
 #tp-firmas {
   display: flex;
   justify-content: space-between;

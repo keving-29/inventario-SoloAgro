@@ -302,6 +302,12 @@
           </div>
           <p style="font-size:12px;color:var(--texto2);margin-bottom:1rem">Agrega productos a la lista de traslado. No se descuenta stock ni se registra como venta.</p>
 
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:1rem">
+            <div><label style="font-size:11px;color:var(--texto2);text-transform:uppercase">Bodega desde</label><input type="text" id="traslado-origen" value="MULTIREPUESTOS SOLOAGRO"></div>
+            <div><label style="font-size:11px;color:var(--texto2);text-transform:uppercase">Bodega hasta</label><input type="text" id="traslado-destino" value="MULTIREPUESTOS SOLOAGRO 2"></div>
+            <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--texto2);text-transform:uppercase">Observaciones</label><input type="text" id="traslado-observaciones" placeholder="Opcional"></div>
+          </div>
+
           <div id="traslado-busqueda-box">
             <input type="text" id="traslado-search" placeholder="Buscar producto y presiona Enter...">
             <div id="traslado-resultados"></div>

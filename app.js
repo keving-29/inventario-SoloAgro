@@ -53,7 +53,7 @@ const buscadoresProducto = {};
 
 // Secciones privadas: piden clave cada vez que se intenta entrar
 const CLAVE_SECCIONES = 'soloagro1228';
-const SECCIONES_PROTEGIDAS = ['inventario','reportes','config'];
+const SECCIONES_PROTEGIDAS = ['inventario','historial','reportes','config'];
 let panelPendiente = null;
 
 // Sync automático/login: solo trae ventas recientes (más que suficiente para
@@ -235,7 +235,8 @@ async function sincronizar(ventasDias) {
   if (datos.Traslados && datos.Traslados.length > 1) {
     DB.traslados = datos.Traslados.slice(1).map(f => ({
       id: String(f[0]), numero: String(f[1]||''), fecha: isoAFechaCO(f[2]), hora: String(f[3]||''),
-      items: parsearJSON(f[4])
+      items: parsearJSON(f[4]),
+      origen: String(f[5]||''), destino: String(f[6]||''), observaciones: String(f[7]||'')
     }));
   }
 
@@ -270,7 +271,9 @@ async function inicializarSheets() {
   if (!datos.Gastos || datos.Gastos.length === 0)
     await sheetsEscribir('append', 'Gastos', ['ID','Categoria','Monto','MetodoPago','Fecha','Hora','Nota']);
   if (!datos.Traslados || datos.Traslados.length === 0)
-    await sheetsEscribir('append', 'Traslados', ['ID','Numero','Fecha','Hora','Items']);
+    await sheetsEscribir('append', 'Traslados', ['ID','Numero','Fecha','Hora','Items','BodegaOrigen','BodegaDestino','Observaciones']);
+  else if (datos.Traslados[0] && String(datos.Traslados[0][5]||'') !== 'BodegaOrigen')
+    await sheetsEscribir('update', 'Traslados', ['BodegaOrigen','BodegaDestino','Observaciones'], 1, 6);
   if (!datos.Config || datos.Config.length === 0) {
     await sheetsEscribir('append', 'Config', ['StockMin','TrasladoContador']);
     await sheetsEscribir('append', 'Config', [5, 0]);
@@ -696,43 +699,89 @@ function prepararImpresion(idContenedor) {
   document.getElementById(idContenedor).classList.add('activo');
 }
 
-function construirHtmlTrasladoPrint(numero, fecha, hora, items) {
-  const filas = items.map((i, idx) => `
+// Datos de la empresa que salen en el encabezado del traslado impreso.
+// Si algún dato queda vacío ('') esa línea simplemente no se imprime.
+const EMPRESA_TRASLADO = {
+  nombre:    'MULTIREPUESTOS SOLOAGRO',
+  nit:       '1115745623',
+  direccion: 'CR 5 #5-42 Barrio Obrero',
+  telefono:  '3142238531',
+  ciudad:    ''
+};
+const BODEGA_ORIGEN_DEFECTO = 'MULTIREPUESTOS SOLOAGRO';
+const BODEGA_DESTINO_DEFECTO = 'MULTIREPUESTOS SOLOAGRO 2';
+
+function datosExtraTraslado() {
+  const val = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  return { origen: val('traslado-origen'), destino: val('traslado-destino'), observaciones: val('traslado-observaciones') };
+}
+
+function construirHtmlTrasladoPrint(numero, fecha, hora, items, extra) {
+  extra = extra || {};
+  const e = EMPRESA_TRASLADO;
+  const origen  = extra.origen  || BODEGA_ORIGEN_DEFECTO;
+  const destino = extra.destino || BODEGA_DESTINO_DEFECTO;
+  const total   = items.reduce((a,i) => a + (i.precio||0)*i.cantidad, 0);
+  const unidades = items.reduce((a,i) => a + i.cantidad, 0);
+
+  const filas = items.map(i => `
     <tr>
-      <td>${idx+1}</td>
       <td>${esc(i.codigo)}</td>
       <td>${esc(i.nombre)}</td>
-      <td style="text-align:center">${i.cantidad}</td>
-      <td>${fmt(i.precio)}</td>
+      <td>${esc(destino)}</td>
+      <td class="tpd-der">${i.cantidad}</td>
+      <td class="tpd-der">${fmt((i.precio||0)*i.cantidad)}</td>
     </tr>`).join('');
 
+  const fila = (k, v) => v ? `<tr><th>${k}</th><td>${esc(v)}</td></tr>` : '';
+
   return `
-    <div id="tp-header">
-      <h1>Multirepuestos SoloAgro</h1>
-      <p>Traslado de productos</p>
-      <p style="font-weight:600;margin-top:4px">${numero}</p>
-    </div>
-    <div id="tp-meta">
-      <span><strong>Fecha:</strong> ${fecha}</span>
-      <span><strong>Hora:</strong> ${hora}</span>
-    </div>
-    <table>
-      <thead><tr><th>#</th><th>Código</th><th>Nombre</th><th>Cantidad</th><th>Precio</th></tr></thead>
-      <tbody>${filas}</tbody>
-    </table>
-    <p style="margin-top:12px;font-size:13px"><strong>Total de productos:</strong> ${items.length}</p>
-    <div id="tp-firmas">
-      <div class="tp-firma"><div class="tp-linea"></div><span>Quien realiza el traslado</span></div>
-      <div class="tp-firma"><div class="tp-linea"></div><span>Quien recibe</span></div>
+    <div class="tpd-pagina">
+      <div class="tpd-cabecera">
+        <div class="tpd-empresa">
+          <strong>${esc(e.nombre)}</strong>
+          ${e.nit ? `<span>NIT : ${esc(e.nit)}</span>` : ''}
+          ${e.direccion ? `<span>${esc(e.direccion)}</span>` : ''}
+          ${e.telefono ? `<span>${esc(e.telefono)}</span>` : ''}
+          ${e.ciudad ? `<span>${esc(e.ciudad)}</span>` : ''}
+        </div>
+        <div class="tpd-numero"><span>Traslado</span><strong>${esc(numero)}</strong></div>
+      </div>
+
+      <div class="tpd-cajas">
+        <table class="tpd-caja">
+          ${fila('Señores', e.nombre)}${fila('NIT', e.nit)}${fila('Dirección', e.direccion)}${fila('Teléfono', e.telefono)}${fila('Ciudad', e.ciudad)}
+        </table>
+        <table class="tpd-caja">
+          ${fila('Fecha', fecha + ' ' + hora)}${fila('Bodega Desde', origen)}${fila('Bodega Hasta', destino || '—')}
+        </table>
+      </div>
+
+      <table class="tpd-tabla">
+        <thead><tr><th>Producto</th><th>Descripción</th><th>Bodega</th><th>Cantidad</th><th>Valor</th></tr></thead>
+        <tbody>${filas}</tbody>
+        <tfoot><tr><td colspan="3" class="tpd-der"><strong>Totales (${items.length} productos)</strong></td><td class="tpd-der"><strong>${unidades}</strong></td><td class="tpd-der"><strong>${fmt(total)}</strong></td></tr></tfoot>
+      </table>
+
+      <div class="tpd-obs"><strong>OBSERVACIONES</strong>${extra.observaciones ? ' ' + esc(extra.observaciones) : ''}</div>
+
+      <div class="tpd-pie">
+        <div class="tpd-firmas">
+          <div class="tpd-firma"><span>Elaborado por</span></div>
+          <div class="tpd-firma"><span>Aprobado por</span></div>
+        </div>
+        <div class="tpd-pag">Pagina : 1 de 1</div>
+      </div>
     </div>
   `;
 }
 
-async function guardarTrasladoRealizado(numero, fecha, hora, items) {
-  const registro = { id: uid(), numero, fecha, hora, items: items.map(i=>({...i})) };
+async function guardarTrasladoRealizado(numero, fecha, hora, items, extra) {
+  extra = extra || {};
+  const registro = { id: uid(), numero, fecha, hora, items: items.map(i=>({...i})), origen: extra.origen||'', destino: extra.destino||'', observaciones: extra.observaciones||'' };
   DB.traslados.push(registro);
   guardarLocal();
-  await sheetsEscribir('append','Traslados',[registro.id, registro.numero, registro.fecha, registro.hora, JSON.stringify(registro.items)]);
+  await sheetsEscribir('append','Traslados',[registro.id, registro.numero, registro.fecha, registro.hora, JSON.stringify(registro.items), registro.origen, registro.destino, registro.observaciones]);
   return registro;
 }
 
@@ -744,17 +793,18 @@ async function imprimirTraslado() {
   const fecha = fechaCO(ahora);
   const hora  = horaCO(ahora);
 
-  await guardarTrasladoRealizado(numero, fecha, hora, traslado);
+  const extra = datosExtraTraslado();
+  await guardarTrasladoRealizado(numero, fecha, hora, traslado, extra);
   renderTrasladosHistorial();
 
-  document.getElementById('traslado-print-contenido').innerHTML = construirHtmlTrasladoPrint(numero, fecha, hora, traslado);
+  document.getElementById('traslado-print-contenido').innerHTML = construirHtmlTrasladoPrint(numero, fecha, hora, traslado, extra);
   prepararImpresion('traslado-print');
   window.print();
 }
 
 function reimprimirTraslado(registro) {
   document.getElementById('traslado-print-contenido').innerHTML =
-    construirHtmlTrasladoPrint(registro.numero, registro.fecha, registro.hora, registro.items);
+    construirHtmlTrasladoPrint(registro.numero, registro.fecha, registro.hora, registro.items, registro);
   prepararImpresion('traslado-print');
   window.print();
 }
