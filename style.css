@@ -967,3 +967,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--rosa); backgroun
   .top-cab span:nth-child(4),.top-barra{display:none}
   .top-mini-dona{display:flex;justify-content:center}
 }
+
+/* Ventas con ganancia negativa */
+.rep-neg { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 12px; padding: 12px 16px; margin: 14px 0 20px; }
+.rep-neg summary { cursor: pointer; font-weight: 600; color: #A32D2D; font-size: 14px; }
+.rep-neg .tabla-wrap { margin-top: 10px; background: var(--card); border-radius: 10px; }

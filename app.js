@@ -4147,6 +4147,25 @@ function renderReportes(periodo) {
       <div class="rp-sub">Ganancia total: ${fmt(r.ganancia)}</div>
     </div>`;
 
+  // Ventas con ganancia negativa del periodo (notas crédito, abonos con costo mayor al monto, ventas bajo costo)
+  const contNeg = document.getElementById('reporte-neg');
+  if (contNeg) {
+    const negativas = ventas.filter(v => (v.ganancia || 0) < 0).sort((a, b) => a.ganancia - b.ganancia);
+    contNeg.innerHTML = negativas.length ? `
+      <details class="rep-neg" open>
+        <summary>⚠️ ${negativas.length} movimiento(s) con ganancia negativa en este periodo — suman ${fmt(negativas.reduce((s, v) => s + v.ganancia, 0))}</summary>
+        <div class="tabla-wrap"><table>
+          <thead><tr><th>Fecha</th><th>Detalle</th><th>Pago</th><th>Total</th><th>Ganancia</th></tr></thead>
+          <tbody>${negativas.slice(0, 40).map(v => `<tr>
+            <td>${esc(v.fecha)}<br><span style="font-size:11px;color:var(--texto2)">${esc(v.hora)}</span></td>
+            <td style="font-size:13px">${esc(v.nota) || (v.items || []).map(i => esc(i.nombre) + ' x' + i.cantidad).join(', ')}</td>
+            <td>${badgeMetodo(v)}</td>
+            <td>${fmt(v.total)}</td>
+            <td style="color:#A32D2D;font-weight:600">${fmt(v.ganancia)}</td>
+          </tr>`).join('')}</tbody></table></div>
+      </details>` : '';
+  }
+
   // Ganancia neta del periodo: una "cascada" por método de pago
   const cascada = (cls, icono, titulo, gan, gas, cos, neto, etiqueta) => `
     <div class="neto-card ${cls}">
