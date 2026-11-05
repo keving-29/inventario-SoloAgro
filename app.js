@@ -13,8 +13,8 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxGWExWXXLN0lmWASnP5
 const BODEGA_ACTUAL  = 'soloagro';
 const CODIGO_INICIAL = 1278;
 const BODEGAS = {
-  soloagro:   { nombre: 'MULTIREPUESTOS SOLOAGRO',     codigoMin: 1,    url: 'https://script.google.com/macros/s/AKfycbxGWExWXXLN0lmWASnP52oQsq2m8ynW9-Ku6To07AQxMWS0S8bC5dfqu3Oj27gYXTKgVA/exec' },
-  mundohogar: { nombre: 'MUNDO HOGAR',                  codigoMin: 5000, url: 'https://script.google.com/macros/s/AKfycbzYx7UYaU-MEkU1hTsCtTKFMURNrYFJjwqUJkP69Fo7axJfTtvLxiC3fX7sv-vTmuAK/exec' },
+  soloagro:   { nombre: 'MULTIREPUESTOS SOLOAGRO',     codigoMin: 1,    codigoMax: 4999, url: 'https://script.google.com/macros/s/AKfycbxGWExWXXLN0lmWASnP52oQsq2m8ynW9-Ku6To07AQxMWS0S8bC5dfqu3Oj27gYXTKgVA/exec' },
+  mundohogar: { nombre: 'MUNDO HOGAR',                  codigoMin: 5000, codigoMax: 7999, url: 'https://script.google.com/macros/s/AKfycbzYx7UYaU-MEkU1hTsCtTKFMURNrYFJjwqUJkP69Fo7axJfTtvLxiC3fX7sv-vTmuAK/exec' },
   llano:      { nombre: 'MULTIREPUESTOS DEL LLANO',     codigoMin: 8000, url: 'https://script.google.com/macros/s/AKfycbwuyKKRvMW1P2r3T8OmeujvvDCH__zHGBbGY6GAUNfD9jE9vw4xZzVBhcuc9nzBsFCymg/exec' }
 };
 
@@ -872,7 +872,7 @@ function siguienteCodigoBodega(b, destProds, extras) {
     const m = /^(\D*)(\d+)$/.exec(String(r).trim());
     if (!m) return;
     const n = parseInt(m[2], 10);
-    if (n < b.codigoMin) return;
+    if (n < b.codigoMin || (b.codigoMax && n > b.codigoMax)) return;
     if (!mejor || n > mejor.n) mejor = { p: m[1], n };
   });
   return mejor ? mejor.p + (mejor.n + 1) : String(b.codigoMin + 1);
