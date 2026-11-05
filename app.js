@@ -17,7 +17,8 @@ let DB = {
   gastos:    [],
   costos:    [],
   traslados: [],
-  config:    { stockMin: 5, trasladoContador: 0 }
+  config:    { stockMin: 5, trasladoContador: 0, codigoContador: 1278 },
+  equivalencias: []
 };
 
 let sesion              = null;
@@ -258,6 +259,14 @@ async function sincronizar(ventasDias) {
   if (datos.Config && datos.Config.length > 1) {
     DB.config.stockMin = Number(datos.Config[1][0]) || 5;
     DB.config.trasladoContador = Number(datos.Config[1][1]) || 0;
+    DB.config.codigoContador = Number(datos.Config[1][2]) || DB.config.codigoContador || 1278;
+  }
+
+  if (datos.Equivalencias && datos.Equivalencias.length > 1) {
+    DB.equivalencias = datos.Equivalencias.slice(1).map(f => ({
+      id: String(f[0]), bodega: String(f[1]||''), origenId: String(f[2]||''), origenRef: String(f[3]||''),
+      destinoId: String(f[4]||''), destinoRef: String(f[5]||''), destinoNombre: String(f[6]||'')
+    }));
   }
 
   guardarLocal();
@@ -292,9 +301,15 @@ async function inicializarSheets() {
   else if (datos.Traslados[0] && String(datos.Traslados[0][5]||'') !== 'BodegaOrigen')
     await sheetsEscribir('update', 'Traslados', ['BodegaOrigen','BodegaDestino','Observaciones'], 1, 6);
   if (!datos.Config || datos.Config.length === 0) {
-    await sheetsEscribir('append', 'Config', ['StockMin','TrasladoContador']);
-    await sheetsEscribir('append', 'Config', [5, 0]);
+    await sheetsEscribir('append', 'Config', ['StockMin','TrasladoContador','CodigoContador']);
+    await sheetsEscribir('append', 'Config', [5, 0, 1278]);
+  } else if (datos.Config[0] && String(datos.Config[0][2]||'') !== 'CodigoContador') {
+    // Hoja Config vieja: se agrega la columna del contador de códigos (arranca en 1278, el siguiente será 1279).
+    await sheetsEscribir('update', 'Config', ['CodigoContador'], 1, 3);
+    await sheetsEscribir('update', 'Config', [1278], 2, 3);
   }
+  if (!datos.Equivalencias || datos.Equivalencias.length === 0)
+    await sheetsEscribir('append', 'Equivalencias', ['ID','Bodega','OrigenId','OrigenRef','DestinoId','DestinoRef','DestinoNombre']);
   await sincronizar(VENTAS_DIAS_SYNC_LIGERO);
 }
 
@@ -698,7 +713,7 @@ function renderTraslado() {
 // a mitad de camino podía encontrar el sheet sin valores y devolver el
 // contador en 0, reiniciando la numeración de traslados).
 async function guardarConfigSheet() {
-  await sheetsEscribir('update','Config',[DB.config.stockMin, DB.config.trasladoContador], 2);
+  await sheetsEscribir('update','Config',[DB.config.stockMin, DB.config.trasladoContador, DB.config.codigoContador], 2);
 }
 
 async function siguienteNumeroTraslado() {
@@ -803,8 +818,184 @@ async function guardarTrasladoRealizado(numero, fecha, hora, items, extra) {
   return registro;
 }
 
+const BODEGAS_DESTINO = {
+  mundohogar: { nombre: 'MUNDO HOGAR', url: 'https://script.google.com/macros/s/AKfycbzYx7UYaU-MEkU1hTsCtTKFMURNrYFJjwqUJkP69Fo7axJfTtvLxiC3fX7sv-vTmuAK/exec' },
+  llano:      { nombre: 'MULTIREPUESTOS DEL LLANO', url: 'https://script.google.com/macros/s/AKfycbwuyKKRvMW1P2r3T8OmeujvvDCH__zHGBbGY6GAUNfD9jE9vw4xZzVBhcuc9nzBsFCymg/exec' }
+};
+
+function normTexto(s) {
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+}
+
+// Lee los productos de la otra bodega (su hoja Productos: A-G = id, ref, nombre, pcompra, pventa1, pventa2, stock; J = código de barras).
+async function leerProductosBodega(b) {
+  const r = await fetchConTimeout(b.url + '?action=getAll&ventasDias=1', {}, 30000);
+  const j = await r.json();
+  if (!j || j.ok !== true || !j.data || !Array.isArray(j.data.Productos)) throw new Error('No se pudieron leer los productos de ' + b.nombre);
+  return j.data.Productos.slice(1).map(f => ({
+    id: String(f[0]), ref: String(f[1]||''), nombre: String(f[2]||''), pcompra: Number(f[3])||0,
+    pventa1: Number(f[4])||0, pventa2: Number(f[5])||0, stock: Number(f[6])||0, codigoBarras: String(f[9]||'')
+  })).filter(p => p.id);
+}
+
+async function escribirEnBodega(b, accion, hoja, datos, id, columna) {
+  const body = { action: accion, sheet: hoja, data: datos };
+  if (id) body.id = id;
+  if (columna) body.columna = columna;
+  const r = await fetchConTimeout(b.url, { method: 'POST', body: JSON.stringify(body) }, 30000);
+  const j = await r.json();
+  if (!j || j.ok !== true) throw new Error((j && j.error) || 'La otra bodega rechazó la operación');
+  return true;
+}
+
+// Busca el producto equivalente: 1) equivalencia guardada, 2) código de barras, 3) nombre igual.
+function buscarParejaEnBodega(clave, p, destProds) {
+  const eq = DB.equivalencias.find(e => e.bodega === clave && e.origenId === p.id);
+  if (eq) { const d = destProds.find(x => x.id === eq.destinoId); if (d) return d; }
+  if (p.codigoBarras) { const d = destProds.find(x => x.codigoBarras && x.codigoBarras === p.codigoBarras); if (d) return d; }
+  const n = normTexto(p.nombre);
+  const iguales = destProds.filter(x => normTexto(x.nombre) === n);
+  return iguales.length === 1 ? iguales[0] : null;
+}
+
+// Ventana para elegir/crear el equivalente de los productos sin pareja. Devuelve true si se confirmó.
+function pedirParejasTraslado(b, pendientes, destProds) {
+  return new Promise(resolve => {
+    const cont = document.getElementById('match-contenido');
+    document.getElementById('match-titulo').textContent = 'Productos sin pareja en ' + b.nombre;
+    const pinta = () => {
+      cont.innerHTML = pendientes.map((it, i) => `
+        <div style="border:1px solid var(--borde);border-radius:10px;padding:10px;margin-bottom:10px">
+          <div style="font-weight:600">${esc(it.p.nombre)} <span style="font-weight:400;color:var(--texto2)">· cód ${esc(it.p.ref)} · ${it.cantidad} und</span></div>
+          <div style="font-size:13px;margin:4px 0;${it.sel ? 'color:#1B6B43' : 'color:var(--texto2)'}">${
+            !it.sel ? 'Sin elegir' : it.sel.tipo === 'existe' ? '✓ Será: ' + esc(it.sel.prod.nombre) + ' (cód ' + esc(it.sel.prod.ref) + ', stock ' + it.sel.prod.stock + ')' : '✓ Se creará como nuevo con código ' + esc(it.sel.ref)}</div>
+          <input type="text" class="match-buscar" data-i="${i}" placeholder="Buscar en ${esc(b.nombre)} por nombre o código...">
+          <div class="match-res" id="match-res-${i}"></div>
+          <button class="btn-secundario match-nuevo" data-i="${i}" style="margin-top:6px">Crear como nuevo en ${esc(b.nombre)}</button>
+        </div>`).join('');
+    };
+    pinta();
+    const cierra = ok => {
+      cerrarModal('modal-traslado-match');
+      cont.onclick = cont.oninput = null;
+      document.getElementById('btn-match-confirmar').onclick = null;
+      document.getElementById('btn-match-cancelar').onclick = null;
+      document.getElementById('btn-match-x').onclick = null;
+      resolve(ok);
+    };
+    cont.oninput = e => {
+      if (!e.target.classList.contains('match-buscar')) return;
+      const i = +e.target.dataset.i;
+      const toks = normTexto(e.target.value).split(' ').filter(Boolean);
+      const box = document.getElementById('match-res-' + i);
+      if (!toks.length) { box.innerHTML = ''; return; }
+      const res = destProds.filter(d => { const t = normTexto(d.nombre + ' ' + d.ref + ' ' + d.codigoBarras); return toks.every(k => t.includes(k)); }).slice(0, 6);
+      box.innerHTML = res.length ? res.map(d => `<button type="button" class="btn-secundario match-pick" data-i="${i}" data-id="${esc(d.id)}" style="display:block;width:100%;text-align:left;margin-top:4px">${esc(d.nombre)} <span style="color:var(--texto2)">· cód ${esc(d.ref)} · stock ${d.stock}</span></button>`).join('') : '<p style="font-size:12px;color:var(--texto2)">Sin resultados</p>';
+    };
+    cont.onclick = e => {
+      const pick = e.target.closest('.match-pick');
+      if (pick) { pendientes[+pick.dataset.i].sel = { tipo: 'existe', prod: destProds.find(d => d.id === pick.dataset.id) }; pinta(); return; }
+      const nuevo = e.target.closest('.match-nuevo');
+      if (nuevo) {
+        const it = pendientes[+nuevo.dataset.i];
+        const ref = (prompt('Código que tendrá este producto en ' + b.nombre + ':', it.p.ref) || '').trim();
+        if (!ref) return;
+        if (destProds.some(d => d.ref === ref) || pendientes.some(o => o.sel && o.sel.tipo === 'nuevo' && o.sel.ref === ref)) { alert('Ese código ya existe en ' + b.nombre + '. Usa otro.'); return; }
+        it.sel = { tipo: 'nuevo', ref }; pinta();
+      }
+    };
+    document.getElementById('btn-match-confirmar').onclick = () => {
+      if (pendientes.some(it => !it.sel)) { alert('Falta elegir la pareja de todos los productos.'); return; }
+      cierra(true);
+    };
+    document.getElementById('btn-match-cancelar').onclick = () => cierra(false);
+    document.getElementById('btn-match-x').onclick = () => cierra(false);
+    abrirModal('modal-traslado-match');
+  });
+}
+
+// Mueve el stock: suma en la otra bodega y descuenta aquí. Si algo falla en la otra bodega, deshace lo que alcanzó a escribir.
+async function moverStockTraslado(clave) {
+  const b = BODEGAS_DESTINO[clave];
+  // 1) Productos de aquí
+  const lineas = [];
+  for (const it of traslado) {
+    const p = DB.productos.find(x => x.ref === it.codigo);
+    if (!p) throw new Error('El producto ' + it.codigo + ' ya no existe en el inventario.');
+    if (it.cantidad > p.stock) throw new Error('Solo hay ' + p.stock + ' de ' + p.nombre + ' y quieres trasladar ' + it.cantidad + '.');
+    lineas.push({ p, cantidad: it.cantidad, dest: null, sel: null });
+  }
+  // 2) Productos de allá y parejas
+  const destProds = await leerProductosBodega(b);
+  lineas.forEach(l => { l.dest = buscarParejaEnBodega(clave, l.p, destProds); });
+  const pendientes = lineas.filter(l => !l.dest).map(l => ({ p: l.p, cantidad: l.cantidad, sel: null, linea: l }));
+  if (pendientes.length) {
+    const ok = await pedirParejasTraslado(b, pendientes, destProds);
+    if (!ok) return false;
+    pendientes.forEach(pe => { if (pe.sel.tipo === 'existe') pe.linea.dest = pe.sel.prod; else pe.linea.nuevoRef = pe.sel.ref; });
+  }
+  // 3) Escribir en la otra bodega (agrupando por producto destino)
+  const hechos = [];
+  try {
+    const porDestino = new Map();
+    lineas.forEach(l => {
+      if (l.dest) { const e = porDestino.get(l.dest.id) || { dest: l.dest, cant: 0 }; e.cant += l.cantidad; porDestino.set(l.dest.id, e); }
+    });
+    for (const e of porDestino.values()) {
+      await escribirEnBodega(b, 'update', 'Productos', [e.dest.stock + e.cant], e.dest.id, 7);
+      hechos.push({ tipo: 'update', id: e.dest.id, antes: e.dest.stock });
+    }
+    for (const l of lineas.filter(x => !x.dest)) {
+      const id = uid();
+      await escribirEnBodega(b, 'append', 'Productos', [id, l.nuevoRef, l.p.nombre, l.p.pcompra, l.p.pventa1, l.p.pventa2, l.cantidad, '', '', l.p.codigoBarras || '']);
+      hechos.push({ tipo: 'append', id });
+    }
+  } catch (err) {
+    for (const h of hechos.reverse()) {
+      try { h.tipo === 'update' ? await escribirEnBodega(b, 'update', 'Productos', [h.antes], h.id, 7) : await escribirEnBodega(b, 'delete', 'Productos', null, h.id); } catch (e2) {}
+    }
+    throw new Error('No se pudo sumar el stock en ' + b.nombre + ' (' + (err && err.message ? err.message : err) + '). No se descontó nada aquí.');
+  }
+  // 4) Guardar equivalencias nuevas
+  for (const pe of pendientes) {
+    if (pe.sel.tipo !== 'existe') continue;
+    const eq = { id: uid(), bodega: clave, origenId: pe.p.id, origenRef: pe.p.ref, destinoId: pe.sel.prod.id, destinoRef: pe.sel.prod.ref, destinoNombre: pe.sel.prod.nombre };
+    DB.equivalencias.push(eq);
+    await sheetsEscribir('append', 'Equivalencias', [eq.id, eq.bodega, eq.origenId, eq.origenRef, eq.destinoId, eq.destinoRef, eq.destinoNombre]);
+  }
+  // 5) Descontar aquí
+  const fallos = [];
+  for (const l of lineas) {
+    l.p.stock = Math.max(0, l.p.stock - l.cantidad);
+    const ok = await sheetsEscribir('update', 'Productos', [l.p.stock], l.p.id, 7);
+    if (!ok) fallos.push(l.p.nombre);
+  }
+  guardarLocal();
+  if (typeof renderInventario === 'function') renderInventario();
+  if (fallos.length) alert('OJO: el stock ya se sumó en ' + b.nombre + ' pero NO se pudo descontar aquí en Google Sheets para: ' + fallos.join(', ') + '. Ajusta ese stock a mano.');
+  return true;
+}
+
 async function imprimirTraslado() {
   if (traslado.length === 0) { alert('Agrega productos al traslado antes de imprimir'); return; }
+
+  const btnImp = document.getElementById('btn-imprimir-traslado');
+  const clave = document.getElementById('traslado-bodega').value;
+  if (clave) {
+    if (btnImp.disabled) return;
+    btnImp.disabled = true;
+    try {
+      mostrarToast('Moviendo stock a ' + BODEGAS_DESTINO[clave].nombre + '...');
+      const ok = await moverStockTraslado(clave);
+      if (!ok) { btnImp.disabled = false; return; }
+      mostrarToast('Stock movido ✓');
+    } catch (e) {
+      btnImp.disabled = false;
+      alert('NO SE HIZO EL TRASLADO.\n\n' + (e && e.message ? e.message : e));
+      return;
+    }
+    btnImp.disabled = false;
+  }
 
   const numero = await siguienteNumeroTraslado();
   const ahora = new Date();
@@ -3176,6 +3367,34 @@ function imprimirEtiquetaProducto(id) {
   ventana.document.close();
 }
 
+// Siguiente código libre (arranca en 1279). No lo reserva: el contador solo
+// avanza cuando el producto se guarda de verdad.
+function siguienteCodigoProducto() {
+  let n = (Number(DB.config.codigoContador) || 1278) + 1;
+  const usados = new Set(DB.productos.map(p => String(p.ref)));
+  while (usados.has(String(n))) n++;
+  return String(n);
+}
+
+// Crea el producto recién guardado en Alegra (con unidad) para no tener que
+// correr "migrar productos" a mano. Si falla, el producto queda guardado igual.
+async function migrarProductoNuevoAAlegra(p) {
+  try {
+    const r = await fetchConTimeout(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'migrarProductoAlegra', sheet: 'Productos', id: p.id })
+    }, 30000);
+    const resp = await r.json();
+    if (!resp || resp.ok !== true) throw new Error((resp && resp.error) || 'Alegra no respondió bien');
+    p.alegraId = String(resp.alegraId || '');
+    guardarLocal();
+    mostrarToast('Producto creado en Alegra ✓');
+  } catch (e) {
+    console.error('Migración a Alegra:', e);
+    mostrarToast('Producto guardado, pero NO se pudo crear en Alegra: ' + (e && e.message ? e.message : e));
+  }
+}
+
 function abrirModalProducto(id, codigoBarrasPrellenado) {
   editandoProductoId = id || null;
   document.getElementById('modal-prod-titulo').textContent = id ? 'Editar producto' : 'Agregar producto';
@@ -3191,13 +3410,18 @@ function abrirModalProducto(id, codigoBarrasPrellenado) {
     document.getElementById('prod-stock').value   = p.stock;
   } else {
     ['prod-codigobarras','prod-ref','prod-nombre','prod-pcompra','prod-pventa1','prod-pventa2','prod-stock'].forEach(x => document.getElementById(x).value='');
+    // El código de un producto nuevo se asigna solo: el siguiente número libre.
+    document.getElementById('prod-ref').value = siguienteCodigoProducto();
     // Si se llega aquí desde un escaneo de un código de fábrica que no
     // existe todavía, se deja ya escrito para no tener que digitarlo.
     if (codigoBarrasPrellenado) document.getElementById('prod-codigobarras').value = codigoBarrasPrellenado;
   }
+  // Producto nuevo: el código es automático y no se escribe. Al editar sí se puede corregir.
+  document.getElementById('prod-ref').readOnly = !id;
+  document.getElementById('prod-ref-aviso').classList.toggle('hidden', !!id);
   actualizarPcompraIva();
   abrirModal('modal-producto');
-  if (!id) setTimeout(() => document.getElementById(codigoBarrasPrellenado ? 'prod-ref' : 'prod-codigobarras').focus(), 100);
+  if (!id) setTimeout(() => document.getElementById(codigoBarrasPrellenado ? 'prod-nombre' : 'prod-codigobarras').focus(), 100);
 }
 
 // Muestra, solo como referencia (no se guarda en ningún lado), el precio de
@@ -3219,8 +3443,17 @@ async function guardarProducto() {
   const stock=parseInt(document.getElementById('prod-stock').value)||0;
   if (!ref||!nombre||!pventa1) { alert('Completa los campos obligatorios (*)'); return; }
 
+  // Si dos PC agregan productos casi al tiempo, el código podría haberse repetido: se recalcula.
+  if (!editandoProductoId && DB.productos.some(p => String(p.ref) === ref)) {
+    const nuevoCod = siguienteCodigoProducto();
+    document.getElementById('prod-ref').value = nuevoCod;
+    alert('Ese código ya lo tomó otro producto. Se asignó el siguiente libre: ' + nuevoCod + '. Presiona Guardar otra vez.');
+    return;
+  }
+
   const btn = document.getElementById('btn-guardar-producto');
   btn.textContent='Guardando...'; btn.disabled=true;
+  let nuevoParaAlegra = null;
 
   if (editandoProductoId) {
     const p = DB.productos.find(x => x.id===editandoProductoId);
@@ -3239,11 +3472,19 @@ async function guardarProducto() {
     // H y I se dejan en blanco (las llena la integración con Alegra); J es
     // el código de barras.
     await sheetsEscribir('append','Productos',[nuevo.id,nuevo.ref,nuevo.nombre,nuevo.pcompra,nuevo.pventa1,nuevo.pventa2,nuevo.stock,'','',nuevo.codigoBarras||'']);
+    // Avanza el contador de códigos (solo si el código fue numérico y mayor al actual).
+    const num = Number(nuevo.ref);
+    if (Number.isInteger(num) && num > (Number(DB.config.codigoContador) || 0)) {
+      DB.config.codigoContador = num;
+      await guardarConfigSheet();
+    }
+    nuevoParaAlegra = nuevo;
   }
 
   guardarLocal(); btn.textContent='Guardar'; btn.disabled=false;
   cerrarModal('modal-producto'); renderInventario();
   mostrarToast(editandoProductoId?'Producto actualizado ✓':'Producto agregado ✓');
+  if (nuevoParaAlegra) migrarProductoNuevoAAlegra(nuevoParaAlegra);
 }
 
 async function eliminarProducto(id) {
@@ -4383,6 +4624,8 @@ document.addEventListener('DOMContentLoaded', () => {
   cargarLocal();
   if (DB.usuarios.length===0) DB.usuarios=[{user:'admin',pass:'Soloagro2812',rol:'admin'}];
   if (DB.config.trasladoContador === undefined) DB.config.trasladoContador = 0;
+  if (DB.config.codigoContador === undefined) DB.config.codigoContador = 1278;
+  if (!DB.equivalencias) DB.equivalencias = [];
   if (!DB.clientes) DB.clientes = [];
   if (!DB.deudores) DB.deudores = [];
   if (!DB.anticipos) DB.anticipos = [];
@@ -4581,6 +4824,7 @@ document.addEventListener('DOMContentLoaded', () => {
     traslado = []; renderTraslado();
   });
   document.getElementById('btn-imprimir-traslado').addEventListener('click', imprimirTraslado);
+  document.getElementById('traslado-bodega').addEventListener('change', e => { const b = BODEGAS_DESTINO[e.target.value]; if (b) document.getElementById('traslado-destino').value = b.nombre; });
   document.getElementById('btn-ct-agregar').addEventListener('click', confirmarCantidadTraslado);
   document.getElementById('ct-cantidad').addEventListener('keydown', e => { if (e.key==='Enter') confirmarCantidadTraslado(); });
 
