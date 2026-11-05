@@ -818,8 +818,8 @@ async function guardarTrasladoRealizado(numero, fecha, hora, items, extra) {
 }
 
 const BODEGAS_DESTINO = {
-  mundohogar: { nombre: 'MUNDO HOGAR', url: 'https://script.google.com/macros/s/AKfycbzYx7UYaU-MEkU1hTsCtTKFMURNrYFJjwqUJkP69Fo7axJfTtvLxiC3fX7sv-vTmuAK/exec' },
-  llano:      { nombre: 'MULTIREPUESTOS DEL LLANO', url: 'https://script.google.com/macros/s/AKfycbwuyKKRvMW1P2r3T8OmeujvvDCH__zHGBbGY6GAUNfD9jE9vw4xZzVBhcuc9nzBsFCymg/exec' }
+  mundohogar: { nombre: 'MUNDO HOGAR', codigoMin: 5000, url: 'https://script.google.com/macros/s/AKfycbzYx7UYaU-MEkU1hTsCtTKFMURNrYFJjwqUJkP69Fo7axJfTtvLxiC3fX7sv-vTmuAK/exec' },
+  llano:      { nombre: 'MULTIREPUESTOS DEL LLANO', codigoMin: 8000, url: 'https://script.google.com/macros/s/AKfycbwuyKKRvMW1P2r3T8OmeujvvDCH__zHGBbGY6GAUNfD9jE9vw4xZzVBhcuc9nzBsFCymg/exec' }
 };
 
 function normTexto(s) {
@@ -853,6 +853,20 @@ async function escribirEnBodega(b, accion, hoja, datos, id, columna) {
   return true;
 }
 
+// Siguiente código libre en la numeración de la otra bodega (Llano desde 8001, Mundo Hogar desde 5001).
+// Toma el número más alto que haya en esa bodega (ignorando códigos por debajo del rango) y suma 1; respeta un prefijo si lo tiene.
+function siguienteCodigoBodega(b, destProds, extras) {
+  let mejor = null;
+  destProds.map(d => d.ref).concat(extras || []).forEach(r => {
+    const m = /^(\D*)(\d+)$/.exec(String(r).trim());
+    if (!m) return;
+    const n = parseInt(m[2], 10);
+    if (n < b.codigoMin) return;
+    if (!mejor || n > mejor.n) mejor = { p: m[1], n };
+  });
+  return mejor ? mejor.p + (mejor.n + 1) : String(b.codigoMin + 1);
+}
+
 // Busca el producto equivalente: 1) equivalencia guardada, 2) código de barras, 3) nombre igual.
 function buscarParejaEnBodega(clave, p, destProds) {
   const eq = DB.equivalencias.find(e => e.bodega === clave && e.origenId === p.id);
@@ -873,7 +887,7 @@ function pedirParejasTraslado(b, pendientes, destProds) {
         <div style="border:1px solid var(--borde);border-radius:10px;padding:10px;margin-bottom:10px">
           <div style="font-weight:600">${esc(it.p.nombre)} <span style="font-weight:400;color:var(--texto2)">· cód ${esc(it.p.ref)} · ${it.cantidad} und</span></div>
           <div style="font-size:13px;margin:4px 0;${it.sel ? 'color:#1B6B43' : 'color:var(--texto2)'}">${
-            !it.sel ? 'Sin elegir' : it.sel.tipo === 'existe' ? '✓ Será: ' + esc(it.sel.prod.nombre) + ' (cód ' + esc(it.sel.prod.ref) + ', stock ' + it.sel.prod.stock + ')' : '✓ Se creará como nuevo con código ' + esc(it.sel.ref)}</div>
+            !it.sel ? 'Sin elegir' : it.sel.tipo === 'existe' ? '✓ Será: ' + esc(it.sel.prod.nombre) + ' (cód ' + esc(it.sel.prod.ref) + ', stock ' + it.sel.prod.stock + ')' : '✓ Se creará como nuevo con el código ' + esc(it.sel.ref) + ' (el siguiente de ' + esc(b.nombre) + ')'}</div>
           <input type="text" class="match-buscar" data-i="${i}" placeholder="Buscar en ${esc(b.nombre)} por nombre o código...">
           <div class="match-res" id="match-res-${i}"></div>
           <button class="btn-secundario match-nuevo" data-i="${i}" style="margin-top:6px">Crear como nuevo en ${esc(b.nombre)}</button>
@@ -903,10 +917,9 @@ function pedirParejasTraslado(b, pendientes, destProds) {
       const nuevo = e.target.closest('.match-nuevo');
       if (nuevo) {
         const it = pendientes[+nuevo.dataset.i];
-        const ref = (prompt('Código que tendrá este producto en ' + b.nombre + ':', it.p.ref) || '').trim();
-        if (!ref) return;
-        if (destProds.some(d => d.ref === ref) || pendientes.some(o => o.sel && o.sel.tipo === 'nuevo' && o.sel.ref === ref)) { alert('Ese código ya existe en ' + b.nombre + '. Usa otro.'); return; }
-        it.sel = { tipo: 'nuevo', ref }; pinta();
+        // El código se asigna solo: el siguiente de la numeración de esa bodega.
+        const reservados = pendientes.filter(o => o !== it && o.sel && o.sel.tipo === 'nuevo').map(o => o.sel.ref);
+        it.sel = { tipo: 'nuevo', ref: siguienteCodigoBodega(b, destProds, reservados) }; pinta();
       }
     };
     document.getElementById('btn-match-confirmar').onclick = () => {
