@@ -754,7 +754,6 @@ function construirHtmlTrasladoPrint(numero, fecha, hora, items, extra) {
   const e = EMPRESA_TRASLADO;
   const origen  = extra.origen  || BODEGA_ORIGEN_DEFECTO;
   const destino = extra.destino || BODEGA_DESTINO_DEFECTO;
-  const total   = items.reduce((a,i) => a + (i.precio||0)*i.cantidad, 0);
   const unidades = items.reduce((a,i) => a + i.cantidad, 0);
 
   const filas = items.map(i => `
@@ -763,7 +762,7 @@ function construirHtmlTrasladoPrint(numero, fecha, hora, items, extra) {
       <td>${esc(i.nombre)}</td>
       <td>${esc(destino)}</td>
       <td class="tpd-der">${i.cantidad}</td>
-      <td class="tpd-der">${fmt((i.precio||0)*i.cantidad)}</td>
+      <td class="tpd-der">${fmt(i.precio||0)}</td>
     </tr>`).join('');
 
   const fila = (k, v) => v ? `<tr><th>${k}</th><td>${esc(v)}</td></tr>` : '';
@@ -791,9 +790,9 @@ function construirHtmlTrasladoPrint(numero, fecha, hora, items, extra) {
       </div>
 
       <table class="tpd-tabla">
-        <thead><tr><th>Producto</th><th>Descripción</th><th>Bodega</th><th>Cantidad</th><th>Valor</th></tr></thead>
+        <thead><tr><th>Producto</th><th>Descripción</th><th>Bodega</th><th>Cantidad</th><th>Precio unitario</th></tr></thead>
         <tbody>${filas}</tbody>
-        <tfoot><tr><td colspan="3" class="tpd-der"><strong>Totales (${items.length} productos)</strong></td><td class="tpd-der"><strong>${unidades}</strong></td><td class="tpd-der"><strong>${fmt(total)}</strong></td></tr></tfoot>
+        <tfoot><tr><td colspan="3" class="tpd-der"><strong>Totales (${items.length} productos)</strong></td><td class="tpd-der"><strong>${unidades}</strong></td><td></td></tr></tfoot>
       </table>
 
       <div class="tpd-obs"><strong>OBSERVACIONES</strong>${extra.observaciones ? `<div class="tpd-obs-texto">${esc(extra.observaciones)}</div>` : ''}</div>
@@ -827,15 +826,21 @@ function normTexto(s) {
   return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
 }
 
-// Lee los productos de la otra bodega (su hoja Productos: A-G = id, ref, nombre, pcompra, pventa1, pventa2, stock; J = código de barras).
+// Lee los productos de la otra bodega. Devuelve { header, prods }: cada producto trae su fila cruda (raw)
+// para poder reescribirla completa sin depender de qué columnas soporte el Code.gs de esa bodega.
 async function leerProductosBodega(b) {
   const r = await fetchConTimeout(b.url + '?action=getAll&ventasDias=1', {}, 30000);
   const j = await r.json();
-  if (!j || j.ok !== true || !j.data || !Array.isArray(j.data.Productos)) throw new Error('No se pudieron leer los productos de ' + b.nombre);
-  return j.data.Productos.slice(1).map(f => ({
-    id: String(f[0]), ref: String(f[1]||''), nombre: String(f[2]||''), pcompra: Number(f[3])||0,
-    pventa1: Number(f[4])||0, pventa2: Number(f[5])||0, stock: Number(f[6])||0, codigoBarras: String(f[9]||'')
+  if (!j || j.ok !== true || !j.data || !Array.isArray(j.data.Productos) || !j.data.Productos.length) throw new Error('No se pudieron leer los productos de ' + b.nombre);
+  const header = j.data.Productos[0].map(h => String(h||''));
+  const col = (re, def) => { const i = header.findIndex(h => re.test(normTexto(h))); return i >= 0 ? i : def; };
+  const idx = { id: 0, ref: col(/^(ref|referencia|codigo)$/, 1), nombre: col(/^(nombre|producto|descripcion)$/, 2), stock: col(/^(stock|existencia|existencias|cantidad)$/, 6), barras: col(/barras/, 9) };
+  const prods = j.data.Productos.slice(1).map(f => ({
+    id: String(f[0]), ref: String(f[idx.ref]||''), nombre: String(f[idx.nombre]||''), pcompra: Number(f[3])||0,
+    pventa1: Number(f[4])||0, pventa2: Number(f[5])||0, stock: Number(f[idx.stock])||0,
+    codigoBarras: String(f[idx.barras]||''), raw: f.slice()
   })).filter(p => p.id);
+  return { header, idx, prods };
 }
 
 async function escribirEnBodega(b, accion, hoja, datos, id, columna) {
@@ -926,7 +931,8 @@ async function moverStockTraslado(clave) {
     lineas.push({ p, cantidad: it.cantidad, dest: null, sel: null });
   }
   // 2) Productos de allá y parejas
-  const destProds = await leerProductosBodega(b);
+  const lectura = await leerProductosBodega(b);
+  const destProds = lectura.prods;
   lineas.forEach(l => { l.dest = buscarParejaEnBodega(clave, l.p, destProds); });
   const pendientes = lineas.filter(l => !l.dest).map(l => ({ p: l.p, cantidad: l.cantidad, sel: null, linea: l }));
   if (pendientes.length) {
@@ -934,25 +940,39 @@ async function moverStockTraslado(clave) {
     if (!ok) return false;
     pendientes.forEach(pe => { if (pe.sel.tipo === 'existe') pe.linea.dest = pe.sel.prod; else pe.linea.nuevoRef = pe.sel.ref; });
   }
-  // 3) Escribir en la otra bodega (agrupando por producto destino)
+  // 3) Escribir en la otra bodega (agrupando por producto destino). Se reescribe la fila completa
+  //    (sin usar "columna") para que funcione con cualquier versión del Code.gs de esa bodega.
   const hechos = [];
+  const filaConStock = (d, stock) => { const f = d.raw.slice(); f[lectura.idx.stock] = stock; return f; };
   try {
     const porDestino = new Map();
     lineas.forEach(l => {
       if (l.dest) { const e = porDestino.get(l.dest.id) || { dest: l.dest, cant: 0 }; e.cant += l.cantidad; porDestino.set(l.dest.id, e); }
     });
+    const esperados = new Map();
     for (const e of porDestino.values()) {
-      await escribirEnBodega(b, 'update', 'Productos', [e.dest.stock + e.cant], e.dest.id, 7);
-      hechos.push({ tipo: 'update', id: e.dest.id, antes: e.dest.stock });
+      await escribirEnBodega(b, 'update', 'Productos', filaConStock(e.dest, e.dest.stock + e.cant), e.dest.id);
+      hechos.push({ tipo: 'update', id: e.dest.id, fila: e.dest.raw.slice() });
+      esperados.set(e.dest.id, e.dest.stock + e.cant);
     }
     for (const l of lineas.filter(x => !x.dest)) {
       const id = uid();
-      await escribirEnBodega(b, 'append', 'Productos', [id, l.nuevoRef, l.p.nombre, l.p.pcompra, l.p.pventa1, l.p.pventa2, l.cantidad, '', '', l.p.codigoBarras || '']);
+      const fila = new Array(Math.max(lectura.header.length, 10)).fill('');
+      fila[0] = id; fila[lectura.idx.ref] = l.nuevoRef; fila[lectura.idx.nombre] = l.p.nombre;
+      fila[3] = l.p.pcompra; fila[4] = l.p.pventa1; fila[5] = l.p.pventa2; fila[lectura.idx.stock] = l.cantidad; fila[lectura.idx.barras] = l.p.codigoBarras || '';
+      await escribirEnBodega(b, 'append', 'Productos', fila);
       hechos.push({ tipo: 'append', id });
+      esperados.set(id, l.cantidad);
+    }
+    // Verificación: se vuelve a leer la otra bodega y se comprueba que el stock quedó guardado.
+    const despues = (await leerProductosBodega(b)).prods;
+    for (const [id, stockEsperado] of esperados) {
+      const d = despues.find(x => x.id === id);
+      if (!d || d.stock !== stockEsperado) throw new Error('la otra bodega no guardó el cambio de stock (revisa que su Code.gs esté desplegado)');
     }
   } catch (err) {
     for (const h of hechos.reverse()) {
-      try { h.tipo === 'update' ? await escribirEnBodega(b, 'update', 'Productos', [h.antes], h.id, 7) : await escribirEnBodega(b, 'delete', 'Productos', null, h.id); } catch (e2) {}
+      try { h.tipo === 'update' ? await escribirEnBodega(b, 'update', 'Productos', h.fila, h.id) : await escribirEnBodega(b, 'delete', 'Productos', null, h.id); } catch (e2) {}
     }
     throw new Error('No se pudo sumar el stock en ' + b.nombre + ' (' + (err && err.message ? err.message : err) + '). No se descontó nada aquí.');
   }
