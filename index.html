@@ -276,16 +276,12 @@
               <button class="btn-peligro" id="btn-limpiar-traslado">Limpiar lista</button>
             </div>
           </div>
-          <p style="font-size:12px;color:var(--texto2);margin-bottom:1rem">Agrega productos a la lista de traslado. Si eliges una bodega en “Mover stock a”, al imprimir se descuenta aquí y se suma en esa bodega. No se registra como venta.</p>
+          <p style="font-size:12px;color:var(--texto2);margin-bottom:1rem">Agrega productos a la lista de traslado. Si eliges una bodega en “Mover stock a”, al imprimir se descuenta aquí y se suma en esa bodega. Con “Prueba / solo imprimir” no se mueve nada. No se registra como venta.</p>
 
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:1rem">
             <div><label style="font-size:11px;color:var(--texto2);text-transform:uppercase">Bodega desde</label><input type="text" id="traslado-origen" value="MULTIREPUESTOS SOLOAGRO"></div>
             <div><label style="font-size:11px;color:var(--texto2);text-transform:uppercase">Mover stock a</label>
-              <select id="traslado-bodega">
-                <option value="">Solo imprimir (no mueve stock)</option>
-                <option value="mundohogar">Mundo Hogar</option>
-                <option value="llano">Multirepuestos del Llano</option>
-              </select></div>
+              <select id="traslado-bodega"></select></div>
             <div><label style="font-size:11px;color:var(--texto2);text-transform:uppercase">Bodega hasta</label><input type="text" id="traslado-destino" value="MULTIREPUESTOS SOLOAGRO 2"></div>
             <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--texto2);text-transform:uppercase">Observaciones</label><textarea id="traslado-observaciones" rows="4" placeholder="Opcional. Puedes escribir varias líneas (Enter para bajar de línea)"></textarea></div>
           </div>

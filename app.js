@@ -4,6 +4,21 @@
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxGWExWXXLN0lmWASnP52oQsq2m8ynW9-Ku6To07AQxMWS0S8bC5dfqu3Oj27gYXTKgVA/exec';
 
 // =============================================
+// BODEGAS (las 3 páginas se mueven mercancía entre sí)
+// =============================================
+// BODEGA_ACTUAL: cuál es ESTA página. CODIGO_INICIAL: último código ya usado en esta bodega
+// (el siguiente producto nuevo será CODIGO_INICIAL + 1). codigoMin: desde qué número empieza
+// la numeración de cada bodega (sirve para calcular el siguiente código cuando se crea
+// un producto allá desde un traslado).
+const BODEGA_ACTUAL  = 'soloagro';
+const CODIGO_INICIAL = 1278;
+const BODEGAS = {
+  soloagro:   { nombre: 'MULTIREPUESTOS SOLOAGRO',     codigoMin: 1,    url: 'https://script.google.com/macros/s/AKfycbxGWExWXXLN0lmWASnP52oQsq2m8ynW9-Ku6To07AQxMWS0S8bC5dfqu3Oj27gYXTKgVA/exec' },
+  mundohogar: { nombre: 'MUNDO HOGAR',                  codigoMin: 5000, url: 'https://script.google.com/macros/s/AKfycbzYx7UYaU-MEkU1hTsCtTKFMURNrYFJjwqUJkP69Fo7axJfTtvLxiC3fX7sv-vTmuAK/exec' },
+  llano:      { nombre: 'MULTIREPUESTOS DEL LLANO',     codigoMin: 8000, url: 'https://script.google.com/macros/s/AKfycbwuyKKRvMW1P2r3T8OmeujvvDCH__zHGBbGY6GAUNfD9jE9vw4xZzVBhcuc9nzBsFCymg/exec' }
+};
+
+// =============================================
 // ESTADO LOCAL
 // =============================================
 let DB = {
@@ -17,7 +32,7 @@ let DB = {
   gastos:    [],
   costos:    [],
   traslados: [],
-  config:    { stockMin: 5, trasladoContador: 0, codigoContador: 1278 },
+  config:    { stockMin: 5, trasladoContador: 0, codigoContador: CODIGO_INICIAL },
   equivalencias: []
 };
 
@@ -259,7 +274,7 @@ async function sincronizar(ventasDias) {
   if (datos.Config && datos.Config.length > 1) {
     DB.config.stockMin = Number(datos.Config[1][0]) || 5;
     DB.config.trasladoContador = Number(datos.Config[1][1]) || 0;
-    DB.config.codigoContador = Number(datos.Config[1][2]) || DB.config.codigoContador || 1278;
+    DB.config.codigoContador = Number(datos.Config[1][2]) || DB.config.codigoContador || CODIGO_INICIAL;
   }
 
   if (datos.Equivalencias && datos.Equivalencias.length > 1) {
@@ -302,11 +317,11 @@ async function inicializarSheets() {
     await sheetsEscribir('update', 'Traslados', ['BodegaOrigen','BodegaDestino','Observaciones'], 1, 6);
   if (!datos.Config || datos.Config.length === 0) {
     await sheetsEscribir('append', 'Config', ['StockMin','TrasladoContador','CodigoContador']);
-    await sheetsEscribir('append', 'Config', [5, 0, 1278]);
+    await sheetsEscribir('append', 'Config', [5, 0, CODIGO_INICIAL]);
   } else if (datos.Config[0] && String(datos.Config[0][2]||'') !== 'CodigoContador') {
-    // Hoja Config vieja: se agrega la columna del contador de códigos (arranca en 1278, el siguiente será 1279).
+    // Hoja Config vieja: se agrega la columna del contador de códigos (arranca en CODIGO_INICIAL; el siguiente código será CODIGO_INICIAL + 1).
     await sheetsEscribir('update', 'Config', ['CodigoContador'], 1, 3);
-    await sheetsEscribir('update', 'Config', [1278], 2, 3);
+    await sheetsEscribir('update', 'Config', [CODIGO_INICIAL], 2, 3);
   }
   if (!datos.Equivalencias || datos.Equivalencias.length === 0)
     await sheetsEscribir('append', 'Equivalencias', ['ID','Bodega','OrigenId','OrigenRef','DestinoId','DestinoRef','DestinoNombre']);
@@ -741,7 +756,7 @@ const EMPRESA_TRASLADO = {
   telefono:  '3142238531',
   ciudad:    ''
 };
-const BODEGA_ORIGEN_DEFECTO = 'MULTIREPUESTOS SOLOAGRO';
+const BODEGA_ORIGEN_DEFECTO = BODEGAS[BODEGA_ACTUAL].nombre;
 const BODEGA_DESTINO_DEFECTO = 'MULTIREPUESTOS SOLOAGRO 2';
 
 function datosExtraTraslado() {
@@ -817,10 +832,6 @@ async function guardarTrasladoRealizado(numero, fecha, hora, items, extra) {
   return registro;
 }
 
-const BODEGAS_DESTINO = {
-  mundohogar: { nombre: 'MUNDO HOGAR', codigoMin: 5000, url: 'https://script.google.com/macros/s/AKfycbzYx7UYaU-MEkU1hTsCtTKFMURNrYFJjwqUJkP69Fo7axJfTtvLxiC3fX7sv-vTmuAK/exec' },
-  llano:      { nombre: 'MULTIREPUESTOS DEL LLANO', codigoMin: 8000, url: 'https://script.google.com/macros/s/AKfycbwuyKKRvMW1P2r3T8OmeujvvDCH__zHGBbGY6GAUNfD9jE9vw4xZzVBhcuc9nzBsFCymg/exec' }
-};
 
 function normTexto(s) {
   return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
@@ -934,7 +945,7 @@ function pedirParejasTraslado(b, pendientes, destProds) {
 
 // Mueve el stock: suma en la otra bodega y descuenta aquí. Si algo falla en la otra bodega, deshace lo que alcanzó a escribir.
 async function moverStockTraslado(clave) {
-  const b = BODEGAS_DESTINO[clave];
+  const b = BODEGAS[clave];
   // 1) Productos de aquí
   const lineas = [];
   for (const it of traslado) {
@@ -1018,7 +1029,7 @@ async function imprimirTraslado() {
     if (btnImp.disabled) return;
     btnImp.disabled = true;
     try {
-      mostrarToast('Moviendo stock a ' + BODEGAS_DESTINO[clave].nombre + '...');
+      mostrarToast('Moviendo stock a ' + BODEGAS[clave].nombre + '...');
       const ok = await moverStockTraslado(clave);
       if (!ok) { btnImp.disabled = false; return; }
       mostrarToast('Stock movido ✓');
@@ -3403,7 +3414,7 @@ function imprimirEtiquetaProducto(id) {
 // Siguiente código libre (arranca en 1279). No lo reserva: el contador solo
 // avanza cuando el producto se guarda de verdad.
 function siguienteCodigoProducto() {
-  let n = (Number(DB.config.codigoContador) || 1278) + 1;
+  let n = (Number(DB.config.codigoContador) || CODIGO_INICIAL) + 1;
   const usados = new Set(DB.productos.map(p => String(p.ref)));
   while (usados.has(String(n))) n++;
   return String(n);
@@ -4328,11 +4339,25 @@ function renderTop(contId, ventas, mini) {
   }));
 }
 
+// Para "Más vendidos": los abonos de deudas/créditos/anticipos no cuentan como ventas de productos
+// (cada abono copia la lista completa y se contaría varias veces). En su lugar se cuentan los
+// productos una sola vez, el día en que se fiaron.
+function ventasParaTop(ventas, enRango) {
+  const normales = ventas.filter(v => !/^(Abono deuda|Abono cr[eé]dito|Anticipo)/i.test(v.nota || ''));
+  const virtuales = [];
+  [].concat(DB.deudores || [], DB.creditos || [], (DB.anticipos || []).filter(x => x.pagada)).forEach(d => {
+    if (!enRango(d.fecha)) return;
+    const items = (d.productos || []).map(p => ({ nombre: p.productoNombre || p.nombre, cantidad: p.cantidad, total: (Number(p.precioUnit) || 0) * (Number(p.cantidad) || 0) }));
+    if (items.length) virtuales.push({ items });
+  });
+  return normales.concat(virtuales);
+}
+
 function renderTopResumen() {
   const hoy = parseFechaCO(fechaCO());
   const ini = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  const ventas = DB.ventas.filter(v => { const d = parseFechaCO(v.fecha); return d >= ini && d <= hoy; });
-  renderTop('dash-top', ventas, true);
+  const enMes = f => { const d = parseFechaCO(f); return d >= ini && d <= hoy; };
+  renderTop('dash-top', ventasParaTop(DB.ventas.filter(v => enMes(v.fecha)), enMes), true);
 }
 
 function renderReportes(periodo) {
@@ -4467,7 +4492,7 @@ function renderReportes(periodo) {
       : `<p style="font-size:13px;color:var(--texto2)">Sin costos registrados en este periodo.</p>`;
   }
 
-  renderTop('reporte-top', ventas, false);
+  renderTop('reporte-top', ventasParaTop(ventas, enRango), false);
 
 }
 
@@ -4657,7 +4682,7 @@ document.addEventListener('DOMContentLoaded', () => {
   cargarLocal();
   if (DB.usuarios.length===0) DB.usuarios=[{user:'admin',pass:'Soloagro2812',rol:'admin'}];
   if (DB.config.trasladoContador === undefined) DB.config.trasladoContador = 0;
-  if (DB.config.codigoContador === undefined) DB.config.codigoContador = 1278;
+  if (DB.config.codigoContador === undefined) DB.config.codigoContador = CODIGO_INICIAL;
   if (!DB.equivalencias) DB.equivalencias = [];
   if (!DB.clientes) DB.clientes = [];
   if (!DB.deudores) DB.deudores = [];
@@ -4857,7 +4882,12 @@ document.addEventListener('DOMContentLoaded', () => {
     traslado = []; renderTraslado();
   });
   document.getElementById('btn-imprimir-traslado').addEventListener('click', imprimirTraslado);
-  document.getElementById('traslado-bodega').addEventListener('change', e => { const b = BODEGAS_DESTINO[e.target.value]; if (b) document.getElementById('traslado-destino').value = b.nombre; });
+  // Opciones del traslado: modo prueba + las otras dos bodegas (no se puede trasladar a sí misma).
+  const selBodega = document.getElementById('traslado-bodega');
+  selBodega.innerHTML = '<option value="">Prueba / solo imprimir (no mueve stock)</option>' +
+    Object.keys(BODEGAS).filter(k => k !== BODEGA_ACTUAL).map(k => `<option value="${k}">${BODEGAS[k].nombre}</option>`).join('');
+  document.getElementById('traslado-origen').value = BODEGAS[BODEGA_ACTUAL].nombre;
+  document.getElementById('traslado-bodega').addEventListener('change', e => { const b = BODEGAS[e.target.value]; document.getElementById('traslado-destino').value = b ? b.nombre : 'MULTIREPUESTOS SOLOAGRO 2'; });
   document.getElementById('btn-ct-agregar').addEventListener('click', confirmarCantidadTraslado);
   document.getElementById('ct-cantidad').addEventListener('keydown', e => { if (e.key==='Enter') confirmarCantidadTraslado(); });
 
